@@ -1,0 +1,46 @@
+.side-nav {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 240px;
+  height: 100vh;
+  background-color: #0F0F12;
+  border-right: 1px solid #2e303a;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.nav-menu ul {
+  list-style: none;
+  padding: 0;
+  margin: 40px 0;
+}
+
+.nav-menu li {
+  margin: 20px 0;
+}
+
+.nav-menu a {
+  color: #9ca3af;
+  text-decoration: none;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: color 0.2s;
+}
+
+.nav-menu li.active-link a {
+  color: #c084fc; /* JOKO Purple */
+  font-weight: 600;
+}
+
+.joko-logo {
+  font-size: 24px;
+  font-weight: bold;
+  color: white;
+  letter-spacing: 2px;
+}
