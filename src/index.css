@@ -57,16 +57,14 @@
   }
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+:root {
+  --bg: #0B0B0F;            /* Deeper, richer black */
+  --card-bg: #1A1A22;       /* The "Obsidian" card color */
+  --text-primary: #FFFFFF;
+  --text-secondary: #8E8E93;
+  --accent-purple: #9D5CFF; /* Brighter, more vibrant purple */
+  --border-color: #2E2E38;
+  --font-main: 'Inter', system-ui, sans-serif; /* Cleaner geometric font */
 }
 
 body {

@@ -1,29 +1,50 @@
-import { Link, useLocation } from "react-router-dom";
-import "./Navbar.css";
+import { NavLink } from 'react-router-dom';
+import './Navbar.css';
 
-/**
- * Side Navigation Bar for the Artist Interface.
- */
-export function Navbar() {
-    const location = useLocation();
-    const isActive = (path: string) => location.pathname === path ? 'active-link' : '';
-
+export const Navbar = () => {
     return (
-        <nav className="side-nav">
-            <div className="nav-profile">
-                <p className="artist-name">Irawo Afolunde</p>
+        <nav className="sidebar">
+            {/* Top: Artist Profile */}
+            <div className="sidebar-profile">
+                <div className="profile-icon">
+                    <span className="initials">IA</span>
+                </div>
+                <div className="profile-info">
+                    <span className="artist-name">IRAWO AYOTUNDE</span>
+                    <span className="artist-label">Artist</span>
+                </div>
             </div>
-            <div className="nav-menu">
-                <ul>
-                    <li className={isActive('/dashboard')}><Link to="/dashboard">Dashboard</Link></li>
-                    <li className={isActive('/create')}><Link to="/create">Create</Link></li>
-                    <li className={isActive('/analytics')}><Link to="/analytics">Analytics</Link></li>
-                    <li className={isActive('/monetization')}><Link to="/monetization">Monetization</Link></li>
-                </ul>
-            </div>
-            <div className="nav-footer">
-                <h2 className="joko-logo">JOKO</h2>
+
+            <div className="divider"></div>
+
+            {/* Middle: Nav Links (This section will expand) */}
+            <ul className="nav-links">
+                <li>
+                    <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+                        <span className="icon">⊞</span> DASHBOARD
+                    </NavLink>
+                </li>
+                <li>
+                    <NavLink to="/create" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+                        <span className="icon">⊕</span> CREATE
+                    </NavLink>
+                </li>
+                <li>
+                    <NavLink to="/analytics" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+                        <span className="icon">📈</span> ANALYTICS
+                    </NavLink>
+                </li>
+                <li>
+                    <NavLink to="/monetization" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+                        <span className="icon">💰</span> MONETIZATION
+                    </NavLink>
+                </li>
+            </ul>
+
+            {/* Bottom: Brand Logo */}
+            <div className="sidebar-footer">
+                <h2 className="brand-logo">JOKO</h2>
             </div>
         </nav>
     );
-}
+};

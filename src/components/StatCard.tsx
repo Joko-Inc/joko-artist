@@ -1,6 +1,7 @@
 /**
  * StatCard component for displaying dashboard metrics.
  */
+import "./StatCard.css";
 export function StatCard({ label, value, trend }: { label: string; value: string; trend: string }) {
     return (
         <div className="stat-card">

@@ -1,46 +1,87 @@
-.side-nav {
+.sidebar {
+  width: 260px;
+  height: 100vh;
+  background-color: #0B0B0F;
+  border-right: 1px solid #2E2E38;
+  display: flex;
+  flex-direction: column; /* Stacks items vertically */
   position: fixed;
   left: 0;
   top: 0;
-  width: 240px;
-  height: 100vh;
-  background-color: #0F0F12;
-  border-right: 1px solid #2e303a;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 24px;
-  box-sizing: border-box;
 }
 
-.nav-menu ul {
-  list-style: none;
-  padding: 0;
-  margin: 40px 0;
-}
-
-.nav-menu li {
-  margin: 20px 0;
-}
-
-.nav-menu a {
-  color: #9ca3af;
-  text-decoration: none;
-  font-size: 16px;
+/* --- New Profile Section --- */
+.sidebar-profile {
   display: flex;
   align-items: center;
-  gap: 12px;
-  transition: color 0.2s;
+  padding: 24px;
 }
 
-.nav-menu li.active-link a {
-  color: #c084fc; /* JOKO Purple */
+.profile-icon {
+  width: 42px;
+  height: 42px;
+  background-color: #F0F0F0; /* Light circle like the design */
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+}
+
+.initials {
+  color: #000;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* --- Navigation & Your Purple Glow --- */
+.nav-links {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+  flex: 1; /* This "spring" pushes the footer to the bottom */
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 18px 24px;
+  color: #8E8E93;
+  text-decoration: none;
   font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
 }
 
-.joko-logo {
-  font-size: 24px;
-  font-weight: bold;
+/* Your preferred active state styles */
+.nav-item.active {
+  color: #9D5CFF;
+  background-color: rgba(157, 92, 255, 0.08); /* The purple glow */
+  border-right: 3px solid #9D5CFF;
+}
+
+/* --- Bottom Footer --- */
+.sidebar-footer {
+  padding: 32px 24px;
+}
+
+.brand-logo {
   color: white;
+  font-size: 28px;
+  font-weight: 800;
   letter-spacing: 2px;
+  margin: 0;
+}
+
+.divider {
+  height: 1px;
+  background-color: #2E2E38;
+  margin: 0 24px 16px 24px;
 }
