@@ -1,8 +1,8 @@
 .sidebar {
   width: 260px;
   height: 100vh;
-  background-color: #0B0B0F;
-  border-right: 1px solid #2E2E38;
+  background-color: #0b0b0f;
+  border-right: 1px solid #2e2e38;
   display: flex;
   flex-direction: column; /* Stacks items vertically */
   position: fixed;
@@ -40,7 +40,36 @@
   gap: 2px;
 }
 
-/* --- Navigation & Your Purple Glow --- */
+.artist-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+  line-height: 1.25;
+}
+
+.artist-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.nav-item .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.nav-item .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* --- Navigation & purple glow (active) --- */
 .nav-links {
   list-style-type: none;
   padding: 0;
@@ -52,19 +81,36 @@
   display: flex;
   align-items: center;
   padding: 18px 24px;
-  color: #8E8E93;
+  color: rgba(255, 255, 255, 0.88);
   text-decoration: none;
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 1px;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Your preferred active state styles */
+.nav-item:hover:not(.active) {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .nav-item.active {
-  color: #9D5CFF;
-  background-color: rgba(157, 92, 255, 0.08); /* The purple glow */
-  border-right: 3px solid #9D5CFF;
+  color: #c9a3ff;
+  background: linear-gradient(
+    90deg,
+    rgba(157, 80, 255, 0.14) 0%,
+    rgba(157, 80, 255, 0.04) 100%
+  );
+  border-right: 3px solid #9d50ff;
+  box-shadow:
+    inset 0 0 28px rgba(157, 80, 255, 0.12),
+    0 0 22px rgba(157, 80, 255, 0.18);
+  text-shadow: 0 0 14px rgba(157, 80, 255, 0.55);
+}
+
+.nav-item.active .icon {
+  color: #b97cff;
+  filter: drop-shadow(0 0 6px rgba(157, 80, 255, 0.75));
 }
 
 /* --- Bottom Footer --- */

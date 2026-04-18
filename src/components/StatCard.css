@@ -1,31 +1,105 @@
+/* Stat KPI cards only: matte charcoal top half, purple glow lower half */
 .stat-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 16px; /* Increased roundness */
-  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(46, 46, 56, 0.95);
+  border-radius: 12px;
+  padding: 24px 24px 22px;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  background:
+    radial-gradient(ellipse 125% 88% at 50% 118%, rgba(130, 75, 200, 0.38) 0%, transparent 58%),
+    linear-gradient(180deg, #0a0a0f 0%, #0a0a0f 50%, #0f0e16 50%, #14111c 100%);
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 52%;
+  background: radial-gradient(ellipse 98% 72% at 50% 100%, rgba(157, 80, 255, 0.18) 0%, transparent 68%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.stat-card > * {
   position: relative;
+  z-index: 1;
+}
+
+.stat-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
 }
 
 .stat-label {
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.52);
   font-size: 14px;
-  margin-bottom: 8px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.stat-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-card-icon--blue {
+  background: rgba(59, 130, 246, 0.14);
+  color: #60a5fa;
+}
+
+.stat-card-icon--green {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+}
+
+.stat-card-icon--purple {
+  background: rgba(157, 80, 255, 0.14);
+  color: #c084fc;
+}
+
+.stat-card-icon--teal {
+  background: rgba(45, 212, 191, 0.14);
+  color: #2dd4bf;
+}
+
+.stat-card-icon--yellow {
+  background: rgba(250, 204, 21, 0.14);
+  color: #facc15;
 }
 
 .stat-value {
-  font-size: 36px; /* Bold, high-impact numbers */
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  margin: 0 0 12px;
+  line-height: 1.05;
 }
 
-.counter {
-  font-size: 12px;
-  color: #4ADE80; /* The target's green growth color */
+.stat-trend {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4ade80;
   background: rgba(74, 222, 128, 0.1);
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 6px 11px;
+  border-radius: 8px;
   width: fit-content;
+}
+
+.stat-trend--negative {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
 }

@@ -1,0 +1,211 @@
+.monet-page {
+  max-width: 900px;
+  margin: 0 auto;
+  font-family: var(--font-main, 'Inter', system-ui, sans-serif);
+}
+
+.monet-header {
+  margin-bottom: 28px;
+}
+
+.monet-title {
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 36px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.monet-balance-block {
+  margin-bottom: 28px;
+}
+
+.monet-balance-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0 0 8px;
+}
+
+.monet-balance-value {
+  margin: 0 0 24px;
+  font-size: clamp(36px, 5vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.monet-chart-wrap {
+  width: 100%;
+  padding: 8px 0 4px;
+}
+
+.monet-chart-wrap svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 140px;
+}
+
+.monet-chart-labels {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 2px;
+  padding: 8px 0 0;
+  font-size: clamp(8px, 1.5vw, 10px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.38);
+  text-align: center;
+}
+
+.monet-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+  margin-bottom: 32px;
+}
+
+.monet-transfer {
+  flex: 1 1 260px;
+  max-width: 420px;
+  appearance: none;
+  border: none;
+  border-radius: 12px;
+  padding: 16px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(180deg, #a855f7 0%, #7c3aed 100%);
+  box-shadow: 0 4px 24px rgba(124, 58, 237, 0.4);
+}
+
+.monet-transfer:hover {
+  filter: brightness(1.06);
+}
+
+.monet-wallet {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 12px;
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.92);
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.monet-wallet:hover {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.monet-tx-panel {
+  border: 1px solid rgba(46, 46, 56, 0.95);
+  border-radius: 12px;
+  background: #14141c;
+  padding: 20px 22px 22px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.monet-tx-title {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.02em;
+}
+
+.monet-tx-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(30, 30, 38, 0.95);
+  border: 1px solid rgba(55, 55, 68, 0.6);
+  margin-bottom: 10px;
+}
+
+.monet-tx-row:last-child {
+  margin-bottom: 0;
+}
+
+.monet-tx-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.monet-tx-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.monet-tx-icon--in {
+  background: rgba(74, 222, 128, 0.18);
+  color: #4ade80;
+}
+
+.monet-tx-icon--out {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+
+.monet-tx-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.monet-tx-amount {
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.monet-tx-amount--in {
+  color: #4ade80;
+}
+
+.monet-tx-amount--out {
+  color: #f87171;
+}
+
+@media (max-width: 520px) {
+  .monet-actions {
+    flex-direction: column;
+  }
+
+  .monet-transfer {
+    max-width: none;
+    width: 100%;
+  }
+
+  .monet-wallet {
+    width: 100%;
+    justify-content: center;
+  }
+}

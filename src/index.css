@@ -58,17 +58,19 @@
 }
 
 :root {
-  --bg: #0B0B0F;            /* Deeper, richer black */
-  --card-bg: #1A1A22;       /* The "Obsidian" card color */
-  --text-primary: #FFFFFF;
-  --text-secondary: #8E8E93;
-  --accent-purple: #9D5CFF; /* Brighter, more vibrant purple */
-  --border-color: #2E2E38;
-  --font-main: 'Inter', system-ui, sans-serif; /* Cleaner geometric font */
+  --bg: #0b0b0f;
+  --card-bg: #1a1a24;
+  --text-primary: #ffffff;
+  --text-secondary: #8e8e93;
+  --accent-purple: #9d50ff;
+  --border-color: #2e2e38;
+  --font-main: 'Inter', system-ui, sans-serif;
 }
 
 body {
   margin: 0;
+  font-family: var(--font-main);
+  background-color: #0d0d0d;
 }
 
 h1,
