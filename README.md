@@ -71,3 +71,9 @@ export default defineConfig([
   },
 ])
 ```
+# Extensions + Commands
+
+TOO RUN - npm run server 
+          npm run dev
+
+Extentions: SQLite, SQLite Viewer

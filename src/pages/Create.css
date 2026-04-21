@@ -329,6 +329,24 @@
   background: rgba(157, 80, 255, 0.04);
 }
 
+.upload-zone--thumbnail {
+  padding: 0;
+  min-height: 120px;
+  overflow: hidden;
+}
+
+.upload-zone--thumbnail > div {
+  padding: 24px;
+}
+
+.thumbnail-preview {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+  border-radius: 10px;
+}
+
 .upload-zone svg {
   margin-bottom: 10px;
   opacity: 0.6;
@@ -475,6 +493,56 @@
   background: rgba(157, 80, 255, 0.1);
 }
 
+.draft-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.draft-card-actions .btn-continue {
+  flex: 1;
+}
+
+.btn-delete-draft {
+  appearance: none;
+  border: 1px solid rgba(220, 50, 50, 0.4);
+  background: transparent;
+  color: rgba(220, 80, 80, 0.85);
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-delete-draft:hover {
+  background: rgba(220, 50, 50, 0.15);
+  color: #ff6b6b;
+}
+
+.btn-delete-post {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.25);
+  padding: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn-delete-post:hover {
+  background: rgba(220, 50, 50, 0.12);
+  border-color: rgba(220, 50, 50, 0.35);
+  color: #ff6b6b;
+}
+
 /* —— In Review —— */
 .inreview-wrap {
   position: relative;
@@ -531,6 +599,7 @@
 }
 
 .inreview-card {
+  position: relative;
   border: 1px solid rgba(46, 46, 56, 0.95);
   border-radius: 12px;
   overflow: hidden;
@@ -587,6 +656,107 @@
   background: rgba(180, 130, 30, 0.35);
   border: 1px solid rgba(251, 191, 36, 0.35);
   color: #fde68a;
+}
+
+.status-badge-review--pending {
+  background: rgba(180, 130, 30, 0.35);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fde68a;
+}
+
+.status-badge-review--accepted {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+
+.status-badge-review--declined {
+  background: rgba(220, 50, 50, 0.2);
+  border-color: rgba(220, 50, 50, 0.4);
+  color: #fca5a5;
+}
+
+.inreview-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.visible-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.visible-badge--on {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+
+.visible-badge--off {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.btn-toggle-visible {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-toggle-visible:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.inreview-review-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.btn-review-action {
+  flex: 1;
+  appearance: none;
+  border-radius: 8px;
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-review-action--accept {
+  background: transparent;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #86efac;
+}
+
+.btn-review-action--accept:hover,
+.btn-review-action--accept.btn-review-action--active {
+  background: rgba(34, 197, 94, 0.2);
+}
+
+.btn-review-action--decline {
+  background: transparent;
+  border: 1px solid rgba(220, 50, 50, 0.35);
+  color: #fca5a5;
+}
+
+.btn-review-action--decline:hover,
+.btn-review-action--decline.btn-review-action--active {
+  background: rgba(220, 50, 50, 0.2);
 }
 
 .reviewer-bar {

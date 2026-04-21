@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import './Create.css';
 
 type CreateTab = 'scheduled' | 'create' | 'review';
@@ -154,13 +154,143 @@ function ScheduledView({ year, month, onPrev, onNext }: {
 
 type ContentKind = 'social' | 'video' | 'audio' | 'merch';
 
-function CreateFormView() {
+type Post = {
+  id: string;
+  name: string;
+  description: string | null;
+  file_type: ContentKind;
+  file_url: string | null;
+  thumbnail_url: string | null;
+  category: string | null;
+  posted_date: string | null;
+  status: 'draft' | 'submitted';
+  review_status: 'pending' | 'accepted' | 'declined' | null;
+  visible_to_fans: 0 | 1;
+  updated_at: string;
+  created_at: string;
+};
+
+function timeAgo(isoString: string): string {
+  const diff = Date.now() - new Date(isoString + 'Z').getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs !== 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days !== 1 ? 's' : ''} ago`;
+}
+
+function draftProgress(post: Post): number {
+  const filled = [post.name, post.description, post.category, post.posted_date, post.file_url];
+  return Math.round((filled.filter(Boolean).length / filled.length) * 100);
+}
+
+const KIND_ICONS: Record<ContentKind, React.FC> = {
+  video: IconVideoSmall,
+  audio: IconMusic,
+  social: IconDoc,
+  merch: IconShirt,
+};
+
+async function savePost(
+  fields: { kind: ContentKind; title: string; description: string; category: string; date: string; file: File | null; thumbnail: File | null; status: 'submitted' | 'draft' },
+  editingId: string | null,
+) {
+  const body = new FormData();
+  body.append('file_type', fields.kind);
+  body.append('name', fields.title);
+  body.append('description', fields.description);
+  body.append('category', fields.category);
+  body.append('posted_date', fields.date);
+  body.append('status', fields.status);
+  if (fields.file) body.append('file', fields.file);
+  if (fields.thumbnail) body.append('thumbnail', fields.thumbnail);
+
+  const res = editingId
+    ? await fetch(`/api/posts/${editingId}`, { method: 'PUT', body })
+    : await fetch('/api/posts', { method: 'POST', body });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<Post>;
+}
+
+function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
   const [kind, setKind] = useState<ContentKind>('video');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [date, setDate] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [existingFileUrl, setExistingFileUrl] = useState<string | null>(null);
+  const [thumbnail, setThumbnail] = useState<File | null>(null);
+  const [existingThumbnailUrl, setExistingThumbnailUrl] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Post[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchDrafts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/posts?status=draft');
+      if (res.ok) setDrafts(await res.json());
+    } catch { /* server not running yet */ }
+  }, []);
+
+  useEffect(() => { fetchDrafts(); }, [fetchDrafts]);
+
+  const loadDraft = (post: Post) => {
+    setEditingId(post.id);
+    setKind(post.file_type);
+    setTitle(post.name);
+    setDescription(post.description ?? '');
+    setCategory(post.category ?? '');
+    setDate(post.posted_date ?? '');
+    setFile(null);
+    setExistingFileUrl(post.file_url);
+    setThumbnail(null);
+    setExistingThumbnailUrl(post.thumbnail_url);
+    setFeedback(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const deleteDraft = async (id: string) => {
+    await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+    if (editingId === id) clearForm();
+    fetchDrafts();
+  };
+
+  const clearForm = () => {
+    setEditingId(null);
+    setKind('video');
+    setTitle(''); setDescription(''); setCategory(''); setDate('');
+    setFile(null); setExistingFileUrl(null);
+    setThumbnail(null); setExistingThumbnailUrl(null);
+    setFeedback(null);
+  };
+
+  const handleSubmit = async (status: 'submitted' | 'draft') => {
+    if (!title.trim()) { setFeedback('Please enter a title.'); return; }
+    setBusy(true);
+    setFeedback(null);
+    try {
+      await savePost({ kind, title, description, category, date, file, thumbnail, status }, editingId);
+      clearForm();
+      fetchDrafts();
+      if (status === 'submitted') { onSubmitSuccess(); return; }
+      setFeedback('Draft saved.');
+    } catch {
+      setFeedback('Something went wrong. Is the server running?');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="create-split">
       <div className="create-form-card">
-        <h2>Create New</h2>
+        <h2>{editingId ? 'Edit Draft' : 'Create New'}</h2>
+        {feedback && <p style={{ marginBottom: 12, color: feedback.includes('wrong') ? '#e05' : 'inherit' }}>{feedback}</p>}
         <div className="type-grid" role="group" aria-label="Content type">
           {([
             { id: 'social' as const, label: 'Social Post', Icon: IconDoc },
@@ -174,9 +304,7 @@ function CreateFormView() {
               className={`type-card type-card--${id} ${kind === id ? 'type-card--active' : ''}`}
               onClick={() => setKind(id)}
             >
-              <div className="type-card-icon">
-                <Icon />
-              </div>
+              <div className="type-card-icon"><Icon /></div>
               <div className="type-card-label">{label}</div>
             </button>
           ))}
@@ -184,31 +312,84 @@ function CreateFormView() {
 
         <div className="form-field">
           <label htmlFor="create-title">Title</label>
-          <input id="create-title" name="title" placeholder="Enter title.." autoComplete="off" />
+          <input
+            id="create-title"
+            name="title"
+            placeholder="Enter title.."
+            autoComplete="off"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
         </div>
         <div className="form-field">
           <label htmlFor="create-desc">Description</label>
-          <textarea id="create-desc" name="description" placeholder="Enter a description..." />
+          <textarea
+            id="create-desc"
+            name="description"
+            placeholder="Enter a description..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
         </div>
         <div className="form-field">
           <label>Upload Media</label>
-          <div className="upload-zone" role="button" tabIndex={0}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,audio/*,video/*,.pdf"
+            style={{ display: 'none' }}
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setExistingFileUrl(null); }}
+          />
+          <div
+            className="upload-zone"
+            role="button"
+            tabIndex={0}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
+          >
             <div>
               <IconUpload />
               <div>
-                Drag &amp; drop files here or click to browse.
-                <br />
-                Support for images, audio, video, and documents.
+                {file
+                  ? file.name
+                  : existingFileUrl
+                    ? <>{existingFileUrl.split('/').pop()}<br /><span style={{ opacity: 0.5, fontSize: 12 }}>Click to replace</span></>
+                    : <>Drag &amp; drop files here or click to browse.<br />Support for images, audio, video, and documents.</>
+                }
               </div>
             </div>
           </div>
         </div>
         <div className="form-field">
+          <label>Thumbnail</label>
+          <input
+            ref={thumbnailInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => { setThumbnail(e.target.files?.[0] ?? null); setExistingThumbnailUrl(null); }}
+          />
+          <div
+            className="upload-zone upload-zone--thumbnail"
+            role="button"
+            tabIndex={0}
+            onClick={() => thumbnailInputRef.current?.click()}
+            onKeyDown={(e) => e.key === 'Enter' && thumbnailInputRef.current?.click()}
+          >
+            {thumbnail ? (
+              <img src={URL.createObjectURL(thumbnail)} alt="Thumbnail preview" className="thumbnail-preview" />
+            ) : existingThumbnailUrl ? (
+              <img src={existingThumbnailUrl} alt="Thumbnail preview" className="thumbnail-preview" />
+            ) : (
+              <div><IconUpload /><div>Upload thumbnail image</div></div>
+            )}
+          </div>
+        </div>
+
+        <div className="form-field">
           <label htmlFor="create-cat">Category</label>
-          <select id="create-cat" name="category" defaultValue="">
-            <option value="" disabled>
-              Select category
-            </option>
+          <select id="create-cat" name="category" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="" disabled>Select category</option>
             <option value="music">Music</option>
             <option value="behind">Behind the scenes</option>
             <option value="live">Live</option>
@@ -217,75 +398,100 @@ function CreateFormView() {
         </div>
         <div className="form-field">
           <label htmlFor="create-date">Date</label>
-          <input id="create-date" name="date" type="date" />
+          <input id="create-date" name="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <div className="form-actions">
-          <button type="button" className="btn-submit">
-            Submit
+          <button type="button" className="btn-submit" disabled={busy} onClick={() => handleSubmit('submitted')}>
+            {busy ? 'Submitting…' : 'Submit'}
           </button>
-          <button type="button" className="btn-draft">
-            Save Draft
+          <button type="button" className="btn-draft" disabled={busy} onClick={() => handleSubmit('draft')}>
+            {editingId ? 'Update Draft' : 'Save Draft'}
           </button>
+          {editingId && (
+            <button type="button" className="btn-draft" disabled={busy} onClick={clearForm}>
+              Cancel
+            </button>
+          )}
         </div>
       </div>
 
       <aside className="drafts-column">
         <h3>Drafts</h3>
-        <article className="draft-card">
-          <span className="draft-badge">Draft</span>
-          <div className="draft-card-head">
-            <div className="inreview-icon" style={{ width: 36, height: 36 }}>
-              <IconVideoSmall />
-            </div>
-            <div>
-              <p className="draft-card-title">NYFW Vlog</p>
-              <p className="draft-card-meta">Last edited 7 hrs ago</p>
-            </div>
-          </div>
-          <div className="draft-progress-wrap">
-            <div className="draft-progress-label">
-              <span>Progress</span>
-              <span>64%</span>
-            </div>
-            <div className="draft-progress-bar">
-              <div className="draft-progress-fill" style={{ width: '64%' }} />
-            </div>
-          </div>
-          <button type="button" className="btn-continue">
-            Continue Editing
-          </button>
-        </article>
-        <article className="draft-card">
-          <span className="draft-badge">Draft</span>
-          <div className="draft-card-head">
-            <div className="inreview-icon" style={{ width: 36, height: 36, background: 'linear-gradient(135deg,#8a5520,#623814)' }}>
-              <IconMusic />
-            </div>
-            <div>
-              <p className="draft-card-title">Summer Single Teaser</p>
-              <p className="draft-card-meta">Last edited 2 days ago</p>
-            </div>
-          </div>
-          <div className="draft-progress-wrap">
-            <div className="draft-progress-label">
-              <span>Progress</span>
-              <span>28%</span>
-            </div>
-            <div className="draft-progress-bar">
-              <div className="draft-progress-fill" style={{ width: '28%' }} />
-            </div>
-          </div>
-          <button type="button" className="btn-continue">
-            Continue Editing
-          </button>
-        </article>
+        {drafts.length === 0 && <p style={{ opacity: 0.5, fontSize: 14 }}>No drafts yet.</p>}
+        {drafts.map((post) => {
+          const Icon = KIND_ICONS[post.file_type] ?? IconVideoSmall;
+          const pct = draftProgress(post);
+          return (
+            <article key={post.id} className={`draft-card${editingId === post.id ? ' draft-card--active' : ''}`}>
+              <span className="draft-badge">Draft</span>
+              <div className="draft-card-head">
+                <div className="inreview-icon" style={{ width: 36, height: 36 }}>
+                  <Icon />
+                </div>
+                <div>
+                  <p className="draft-card-title">{post.name}</p>
+                  <p className="draft-card-meta">Last edited {timeAgo(post.updated_at)}</p>
+                </div>
+              </div>
+              <div className="draft-progress-wrap">
+                <div className="draft-progress-label">
+                  <span>Progress</span>
+                  <span>{pct}%</span>
+                </div>
+                <div className="draft-progress-bar">
+                  <div className="draft-progress-fill" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+              <div className="draft-card-actions">
+                <button type="button" className="btn-continue" onClick={() => loadDraft(post)}>
+                  Continue Editing
+                </button>
+                <button type="button" className="btn-delete-draft" onClick={() => deleteDraft(post.id)} aria-label="Delete draft">
+                  Delete
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </aside>
     </div>
   );
 }
 
-function InReviewView() {
-  const [toastOpen, setToastOpen] = useState(true);
+const REVIEW_STATUS_LABEL: Record<string, string> = {
+  pending: 'Pending',
+  accepted: 'Accepted',
+  declined: 'Declined',
+};
+
+const KIND_LABEL: Record<ContentKind, string> = {
+  video: 'Video',
+  audio: 'Audio File',
+  social: 'Social Post',
+  merch: 'Merchandise',
+};
+
+function InReviewView({ showToast }: { showToast: boolean }) {
+  const [toastOpen, setToastOpen] = useState(showToast);
+  const [posts, setPosts] = useState<Post[]>([]);
+
+  const fetchPosts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/posts?status=submitted');
+      if (res.ok) setPosts(await res.json());
+    } catch { /* server not running */ }
+  }, []);
+
+  useEffect(() => { fetchPosts(); }, [fetchPosts]);
+  useEffect(() => { setToastOpen(showToast); }, [showToast]);
+
+  const deletePost = async (id: string) => {
+    await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+    fetchPosts();
+  };
+
+  const formatDate = (iso: string) =>
+    new Date(iso + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   return (
     <div className="inreview-wrap">
@@ -297,95 +503,70 @@ function InReviewView() {
               <small>Your work will be reviewed soon.</small>
             </p>
           </div>
-          <button
-            type="button"
-            className="inreview-toast-close"
-            onClick={() => setToastOpen(false)}
-            aria-label="Dismiss notification"
-          >
+          <button type="button" className="inreview-toast-close" onClick={() => setToastOpen(false)} aria-label="Dismiss notification">
             ×
           </button>
         </div>
       )}
 
       <div className="inreview-list" style={{ marginTop: toastOpen ? 56 : 8 }}>
-        <article className="inreview-card">
-          <div className="inreview-card-top">
-            <div className="inreview-icon">
-              <IconVideoSmall />
-            </div>
-            <div className="inreview-card-text">
-              <h3>Behind the Scenes: NYFW Vlog</h3>
-              <p>Video</p>
-            </div>
-            <span className="status-badge-review">In Review</span>
-          </div>
-          <div className="reviewer-bar">
-            <div className="reviewer-avatar" aria-hidden />
-            <div>
-              <p>Adeoluwa Adeyemo</p>
-              <span>Reviewer | Submitted 2 hrs ago</span>
-            </div>
-          </div>
-          <div className="inreview-timeline-section">
-            <p className="inreview-timeline-title">Review Timeline</p>
-            <div className="timeline">
-              <div className="timeline-step">
-                <div className="timeline-dot">✓</div>
-                <div className="timeline-step-body">
-                  <strong>Submitted</strong>
-                  <span>Feb 23, 2026 10:00am</span>
+        {posts.length === 0 && <p style={{ opacity: 0.5, fontSize: 14 }}>No posts submitted for review yet.</p>}
+        {posts.map((post) => {
+          const Icon = KIND_ICONS[post.file_type] ?? IconVideoSmall;
+          const rs = post.review_status ?? 'pending';
+          return (
+            <article key={post.id} className="inreview-card">
+              <div className="inreview-card-top">
+                <div
+                  className="inreview-icon"
+                  style={post.thumbnail_url ? { backgroundImage: `url(${post.thumbnail_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                >
+                  {!post.thumbnail_url && <Icon />}
                 </div>
-              </div>
-              <div className="timeline-step">
-                <div className="timeline-dot timeline-dot--pending" />
-                <div className="timeline-step-body">
-                  <strong>Review</strong>
-                  <span className="pending-label">Pending</span>
+                <div className="inreview-card-text">
+                  <h3>{post.name}</h3>
+                  <p>{KIND_LABEL[post.file_type]}</p>
                 </div>
+                <span className={`status-badge-review status-badge-review--${rs}`}>
+                  {REVIEW_STATUS_LABEL[rs]}
+                </span>
               </div>
-            </div>
-          </div>
-        </article>
 
-        <article className="inreview-card">
-          <div className="inreview-card-top">
-            <div className="inreview-icon" style={{ background: 'linear-gradient(135deg,#8a5520,#623814)' }}>
-              <IconMusic />
-            </div>
-            <div className="inreview-card-text">
-              <h3>Unreleased Track: Daydreaming</h3>
-              <p>Audio File</p>
-            </div>
-            <span className="status-badge-review">In Review</span>
-          </div>
-          <div className="reviewer-bar">
-            <div className="reviewer-avatar" aria-hidden />
-            <div>
-              <p>Sarah Chen</p>
-              <span>Reviewer | Submitted 1 day ago</span>
-            </div>
-          </div>
-          <div className="inreview-timeline-section">
-            <p className="inreview-timeline-title">Review Timeline</p>
-            <div className="timeline">
-              <div className="timeline-step">
-                <div className="timeline-dot">✓</div>
-                <div className="timeline-step-body">
-                  <strong>Submitted</strong>
-                  <span>Feb 20, 2026 4:30pm</span>
+              <div className="inreview-timeline-section">
+                <p className="inreview-timeline-title">Review Timeline</p>
+                <div className="timeline">
+                  <div className="timeline-step">
+                    <div className="timeline-dot">✓</div>
+                    <div className="timeline-step-body">
+                      <strong>Submitted</strong>
+                      <span>{formatDate(post.created_at)}</span>
+                    </div>
+                  </div>
+                  <div className={`timeline-step ${rs !== 'pending' ? 'timeline-step--done' : ''}`}>
+                    <div className={`timeline-dot ${rs === 'pending' ? 'timeline-dot--pending' : ''}`}>
+                      {rs !== 'pending' ? '✓' : ''}
+                    </div>
+                    <div className="timeline-step-body">
+                      <strong>Review</strong>
+                      {rs === 'pending'
+                        ? <span className="pending-label">Pending</span>
+                        : <span>{REVIEW_STATUS_LABEL[rs]}</span>}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="timeline-step">
-                <div className="timeline-dot timeline-dot--pending" />
-                <div className="timeline-step-body">
-                  <strong>Review</strong>
-                  <span className="pending-label">Pending</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </article>
+
+              <button type="button" className="btn-delete-post" onClick={() => deletePost(post.id)} aria-label="Delete post">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+              </button>
+            </article>
+          );
+        })}
       </div>
     </div>
   );
@@ -393,6 +574,12 @@ function InReviewView() {
 
 export default function Create() {
   const [tab, setTab] = useState<CreateTab>('scheduled');
+  const [showToast, setShowToast] = useState(false);
+
+  const handleSubmitSuccess = () => {
+    setShowToast(true);
+    setTab('review');
+  };
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -458,8 +645,8 @@ export default function Create() {
       {tab === 'scheduled' && (
         <ScheduledView year={viewYear} month={viewMonth} onPrev={goPrevMonth} onNext={goNextMonth} />
       )}
-      {tab === 'create' && <CreateFormView />}
-      {tab === 'review' && <InReviewView />}
+      {tab === 'create' && <CreateFormView onSubmitSuccess={handleSubmitSuccess} />}
+      {tab === 'review' && <InReviewView showToast={showToast} />}
     </div>
   );
 }

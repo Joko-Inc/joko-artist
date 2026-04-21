@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { StatCard } from "../components/StatCard";
 import "./Dashboard.css";
 
@@ -39,6 +40,35 @@ function IconBell() {
   );
 }
 
+type Post = {
+  id: string;
+  name: string;
+  file_type: 'video' | 'audio' | 'social' | 'merch';
+  thumbnail_url: string | null;
+  category: string | null;
+  posted_date: string | null;
+  status: 'draft' | 'submitted';
+  review_status: 'pending' | 'accepted' | 'declined' | null;
+  created_at: string;
+};
+
+const KIND_LABEL: Record<Post['file_type'], string> = {
+  video: 'Video',
+  audio: 'Audio File',
+  social: 'Social Post',
+  merch: 'Merchandise',
+};
+
+const REVIEW_PILL: Record<string, { label: string; cls: string }> = {
+  pending:  { label: 'Pending',  cls: 'content-review-pill--review' },
+  accepted: { label: 'Accepted', cls: 'content-review-pill--approved' },
+  declined: { label: 'Declined', cls: 'content-review-pill--declined' },
+};
+
+function formatDate(iso: string) {
+  return new Date(iso + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function MonthlyInsights() {
   return (
     <section className="panel-card insights-panel">
@@ -68,10 +98,19 @@ function MonthlyInsights() {
   );
 }
 
-/**
- * Dashboard Page Component.
- */
 const Dashboard = () => {
+  const [posts, setPosts] = useState<Post[]>([]);
+
+  useEffect(() => {
+    fetch('/api/posts?status=submitted')
+      .then((r) => r.json())
+      .then(setPosts)
+      .catch(() => {});
+  }, []);
+
+  const recentPosts = posts.slice(0, 5);
+  const inReviewPosts = posts.filter((p) => p.review_status === 'pending');
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
@@ -92,82 +131,42 @@ const Dashboard = () => {
 
           <section className="panel-card">
             <h2 className="panel-title">Recent Content</h2>
-            <article className="recent-row">
-              <div className="recent-thumb" />
-              <div className="recent-main">
-                <span className="recent-title">Day In My Life</span>
-                <div className="recent-meta">Video · Apr 2, 2026</div>
-              </div>
-              <div className="recent-stats">
-                <div>
-                  Views <strong>12.4K</strong>
-                </div>
-                <div>
-                  Likes <strong>892</strong>
-                </div>
-                <div>
-                  New Fans <strong>54</strong>
-                </div>
-              </div>
-            </article>
-            <article className="recent-row">
-              <div className="recent-thumb" />
-              <div className="recent-main">
-                <span className="recent-title">Unreleased Track: Daydreaming</span>
-                <div className="recent-meta">Audio File · Mar 28, 2026</div>
-              </div>
-              <div className="recent-stats">
-                <div>
-                  Views <strong>8.1K</strong>
-                </div>
-                <div>
-                  Likes <strong>1.2K</strong>
-                </div>
-                <div>
-                  New Fans <strong>31</strong>
-                </div>
-              </div>
-            </article>
-            <article className="recent-row">
-              <div className="recent-thumb" />
-              <div className="recent-main">
-                <span className="recent-title">Tour Merch Drop</span>
-                <div className="recent-meta">Merch · Mar 15, 2026</div>
-              </div>
-              <div className="recent-stats">
-                <div>
-                  Views <strong>5.6K</strong>
-                </div>
-                <div>
-                  Likes <strong>410</strong>
-                </div>
-                <div>
-                  New Fans <strong>18</strong>
-                </div>
-              </div>
-            </article>
+            {recentPosts.length === 0 && (
+              <p style={{ opacity: 0.45, fontSize: 14, margin: 0 }}>No posts yet.</p>
+            )}
+            {recentPosts.map((post) => {
+              const pill = REVIEW_PILL[post.review_status ?? 'pending'];
+              return (
+                <article key={post.id} className="recent-row">
+                  <div className="recent-thumb" style={post.thumbnail_url ? { backgroundImage: `url(${post.thumbnail_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined} />
+                  <div className="recent-main">
+                    <span className="recent-title">{post.name}</span>
+                    <div className="recent-meta">
+                      {KIND_LABEL[post.file_type]} · {formatDate(post.created_at)}
+                    </div>
+                  </div>
+                  <span className={`content-review-pill ${pill.cls}`}>{pill.label}</span>
+                </article>
+              );
+            })}
           </section>
 
           <section className="panel-card content-review-panel">
             <h2 className="panel-title">Content In Review</h2>
             <div className="content-review-list">
-              <article className="content-review-item">
-                <div className="content-review-thumb" aria-hidden />
-                <div className="content-review-main">
-                  <div className="content-review-title">Behind The Scenes: MV Shoot</div>
-                  <div className="content-review-meta">Video</div>
-                </div>
-                <span className="content-review-pill content-review-pill--review">In Review</span>
-              </article>
-
-              <article className="content-review-item">
-                <div className="content-review-thumb" aria-hidden />
-                <div className="content-review-main">
-                  <div className="content-review-title">Early Release: New Single</div>
-                  <div className="content-review-meta">Audio File</div>
-                </div>
-                <span className="content-review-pill content-review-pill--approved">Approved</span>
-              </article>
+              {inReviewPosts.length === 0 && (
+                <p style={{ opacity: 0.45, fontSize: 14, margin: 0 }}>Nothing pending review.</p>
+              )}
+              {inReviewPosts.map((post) => (
+                <article key={post.id} className="content-review-item">
+                  <div className="content-review-thumb" aria-hidden style={post.thumbnail_url ? { backgroundImage: `url(${post.thumbnail_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined} />
+                  <div className="content-review-main">
+                    <div className="content-review-title">{post.name}</div>
+                    <div className="content-review-meta">{KIND_LABEL[post.file_type]}</div>
+                  </div>
+                  <span className="content-review-pill content-review-pill--review">Pending</span>
+                </article>
+              ))}
             </div>
           </section>
         </div>

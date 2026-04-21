@@ -1,0 +1,3 @@
+-- Add review_status and visible_to_fans to Post table
+ALTER TABLE Post ADD COLUMN review_status TEXT;
+ALTER TABLE Post ADD COLUMN visible_to_fans INTEGER NOT NULL DEFAULT 0;

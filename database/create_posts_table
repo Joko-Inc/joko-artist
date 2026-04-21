@@ -1,0 +1,18 @@
+-- SQLite
+CREATE TABLE IF NOT EXISTS Post (
+    id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    artist_id     TEXT,
+    name          TEXT NOT NULL,
+    description   TEXT,
+    thumbnail_url TEXT,
+    file_type     TEXT NOT NULL,
+    file_url      TEXT,
+    category      TEXT,
+    posted_date   TEXT,
+    status        TEXT NOT NULL DEFAULT 'draft',
+
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+
+    FOREIGN KEY (artist_id) REFERENCES Artist(id)
+);
