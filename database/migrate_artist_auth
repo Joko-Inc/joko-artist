@@ -1,0 +1,3 @@
+ALTER TABLE Artist ADD COLUMN username TEXT;
+ALTER TABLE Artist ADD COLUMN password_hash TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_artist_username ON Artist(username);

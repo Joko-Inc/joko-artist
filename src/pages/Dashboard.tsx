@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { StatCard } from "../components/StatCard";
+import { getUser } from "../auth";
 import "./Dashboard.css";
 
 function IconUsers() {
@@ -66,7 +67,7 @@ const REVIEW_PILL: Record<string, { label: string; cls: string }> = {
 };
 
 function formatDate(iso: string) {
-  return new Date(iso + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(iso + 'Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function MonthlyInsights() {
@@ -75,9 +76,9 @@ function MonthlyInsights() {
       <h2 className="panel-title">Monthly Insights</h2>
       <div className="insights-chart-wrap">
         <div className="insights-bubbles" aria-hidden>
-          <div className="insights-bubble insights-bubble--nigeria">Nigeria</div>
-          <div className="insights-bubble insights-bubble--lagos">Lagos</div>
           <div className="insights-bubble insights-bubble--fans">+174</div>
+          <div className="insights-bubble insights-bubble--lagos">Lagos</div>
+          <div className="insights-bubble insights-bubble--nigeria">Nigeria</div>
         </div>
         <div className="insights-legend">
           <span className="insights-legend-item">
@@ -99,6 +100,8 @@ function MonthlyInsights() {
 }
 
 const Dashboard = () => {
+  const user = getUser();
+  const firstName = user?.name.split(' ')[0] ?? 'Artist';
   const [posts, setPosts] = useState<Post[]>([]);
 
   useEffect(() => {
@@ -108,7 +111,7 @@ const Dashboard = () => {
       .catch(() => {});
   }, []);
 
-  const recentPosts = posts.slice(0, 5);
+  const recentPosts = posts.slice(0, 3);
   const inReviewPosts = posts.filter((p) => p.review_status === 'pending');
 
   return (
@@ -116,12 +119,12 @@ const Dashboard = () => {
       <header className="dashboard-header">
         <h1 className="dashboard-greet">
           <span className="dashboard-greet-accent">Welcome back, </span>
-          <span>Irawo!</span>
+          <span>{firstName}!</span>
         </h1>
         <label className="fan-view-toggle">
-          <span>FAN VIEW</span>
           <input type="checkbox" name="fan-view" />
           <span className="fan-view-switch" />
+          <span>FAN VIEW</span>
         </label>
       </header>
 
@@ -132,76 +135,39 @@ const Dashboard = () => {
           <section className="panel-card">
             <h2 className="panel-title">Recent Content</h2>
             {recentPosts.length === 0 && (
-              <p style={{ opacity: 0.45, fontSize: 14, margin: 0 }}>No posts yet.</p>
+              <p style={{ opacity: 0.4, fontSize: 14, margin: 0 }}>No posts yet.</p>
             )}
-            {recentPosts.map((post) => {
-              const pill = REVIEW_PILL[post.review_status ?? 'pending'];
-              return (
-                <article key={post.id} className="recent-row">
-                  <div className="recent-thumb" style={post.thumbnail_url ? { backgroundImage: `url(${post.thumbnail_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined} />
-                  <div className="recent-main">
-                    <span className="recent-title">{post.name}</span>
-                    <div className="recent-meta">
-                      {KIND_LABEL[post.file_type]} · {formatDate(post.created_at)}
-                    </div>
-                  </div>
-                  <span className={`content-review-pill ${pill.cls}`}>{pill.label}</span>
-                </article>
-              );
-            })}
-          </section>
-
-          <section className="panel-card content-review-panel">
-            <h2 className="panel-title">Content In Review</h2>
-            <div className="content-review-list">
-              {inReviewPosts.length === 0 && (
-                <p style={{ opacity: 0.45, fontSize: 14, margin: 0 }}>Nothing pending review.</p>
-              )}
-              {inReviewPosts.map((post) => (
-                <article key={post.id} className="content-review-item">
-                  <div className="content-review-thumb" aria-hidden style={post.thumbnail_url ? { backgroundImage: `url(${post.thumbnail_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined} />
-                  <div className="content-review-main">
-                    <div className="content-review-title">{post.name}</div>
-                    <div className="content-review-meta">{KIND_LABEL[post.file_type]}</div>
-                  </div>
-                  <span className="content-review-pill content-review-pill--review">Pending</span>
-                </article>
-              ))}
-            </div>
+            {recentPosts.map((post) => (
+              <article key={post.id} className="recent-row">
+                <div
+                  className="recent-thumb"
+                  style={post.thumbnail_url ? { backgroundImage: `url(${post.thumbnail_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                />
+                <div className="recent-main">
+                  <span className="recent-title">{post.name}</span>
+                  <div className="recent-meta">{KIND_LABEL[post.file_type]} · {formatDate(post.created_at)}</div>
+                </div>
+                <div className="recent-stats">
+                  <div><strong>—</strong> Views</div>
+                  <div><strong>—</strong> Likes</div>
+                  <div><strong>—</strong> New Fans</div>
+                </div>
+              </article>
+            ))}
           </section>
         </div>
 
         <aside className="dashboard-rail">
           <div className="stats-stack">
-            <StatCard
-              label="Total Fans"
-              value="4.8K"
-              trend="+873 last month"
-              tone="blue"
-              icon={<IconUsers />}
-            />
-            <StatCard
-              label="Monthly Revenue"
-              value="$14,345"
-              trend="+1,000 last month"
-              tone="purple"
-              icon={<IconWallet />}
-            />
-            <StatCard
-              label="Engagement"
-              value="84%"
-              trend="+6% last month"
-              tone="green"
-              icon={<IconChart />}
-            />
+            <StatCard label="Total Fans" value="4.8K" trend="+873 last month" tone="blue" icon={<IconUsers />} />
+            <StatCard label="Monthly Revenue" value="$14,345" trend="+1,000 last month" tone="purple" icon={<IconWallet />} />
+            <StatCard label="Engagement" value="84%" trend="+6% last month" tone="green" icon={<IconChart />} />
           </div>
 
           <div className="panel-card notifications-card">
             <h2 className="panel-title">Notifications</h2>
             <div className="notification-item">
-              <div className="notification-icon">
-                <IconBell />
-              </div>
+              <div className="notification-icon"><IconBell /></div>
               <div className="notification-body">
                 <p>You&apos;ve reached 4,000 fans!</p>
                 <span className="notification-time">4 days ago</span>
@@ -209,6 +175,32 @@ const Dashboard = () => {
             </div>
           </div>
         </aside>
+
+        <section className="panel-card content-review-panel">
+          <h2 className="panel-title">Content In Review</h2>
+          <div className="content-review-list">
+            {inReviewPosts.length === 0 && (
+              <p style={{ opacity: 0.4, fontSize: 14, margin: 0 }}>Nothing pending review.</p>
+            )}
+            {inReviewPosts.map((post) => {
+              const pill = REVIEW_PILL[post.review_status ?? 'pending'];
+              return (
+                <article key={post.id} className="content-review-item">
+                  <div
+                    className="content-review-thumb"
+                    aria-hidden
+                    style={post.thumbnail_url ? { backgroundImage: `url(${post.thumbnail_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                  />
+                  <div className="content-review-main">
+                    <div className="content-review-title">{post.name}</div>
+                    <div className="content-review-meta">{KIND_LABEL[post.file_type]}</div>
+                  </div>
+                  <span className={`content-review-pill ${pill.cls}`}>{pill.label}</span>
+                </article>
+              );
+            })}
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -1,4 +1,21 @@
 /* Joko Css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+
+@font-face {
+  font-family: 'Moonrising';
+  src: url('/fonts/Moonrising.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Moonrising';
+  src: url('/fonts/Moonrising-Italic.ttf') format('truetype');
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap;
+}
 
 
 
@@ -64,7 +81,8 @@
   --text-secondary: #8e8e93;
   --accent-purple: #9d50ff;
   --border-color: #2e2e38;
-  --font-main: 'Inter', system-ui, sans-serif;
+  --font-main: 'Montserrat', system-ui, sans-serif;
+  --font-display: 'Moonrising', 'Montserrat', system-ui, sans-serif;
 }
 
 body {
@@ -73,10 +91,8 @@ body {
   background-color: #0d0d0d;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
   color: var(--text-h);
 }
 

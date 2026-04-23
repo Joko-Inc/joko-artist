@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { getUser } from '../auth';
 import './Navbar.css';
 
 function IconDashboard() {
@@ -38,15 +39,32 @@ function IconMonetization() {
   );
 }
 
-export const Navbar = () => {
+function IconLogout() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
+function initials(name: string) {
+  return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+export const Navbar = ({ onLogout }: { onLogout: () => void }) => {
+  const user = getUser();
+  const displayName = user?.name ?? 'Artist';
+
   return (
     <nav className="sidebar">
       <div className="sidebar-profile">
         <div className="profile-icon">
-          <span className="initials">IA</span>
+          <span className="initials">{initials(displayName)}</span>
         </div>
         <div className="profile-info">
-          <span className="artist-name">IRAWO AYOTUNDE</span>
+          <span className="artist-name">{displayName.toUpperCase()}</span>
           <span className="artist-label">Artist</span>
         </div>
       </div>
@@ -55,50 +73,37 @@ export const Navbar = () => {
 
       <ul className="nav-links">
         <li>
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
-          >
-            <span className="icon">
-              <IconDashboard />
-            </span>
+          <NavLink to="/dashboard" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+            <span className="icon"><IconDashboard /></span>
             DASHBOARD
           </NavLink>
         </li>
         <li>
           <NavLink to="/create" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            <span className="icon">
-              <IconCreate />
-            </span>
+            <span className="icon"><IconCreate /></span>
             CREATE
           </NavLink>
         </li>
         <li>
-          <NavLink
-            to="/analytics"
-            className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
-          >
-            <span className="icon">
-              <IconAnalytics />
-            </span>
+          <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+            <span className="icon"><IconAnalytics /></span>
             ANALYTICS
           </NavLink>
         </li>
         <li>
-          <NavLink
-            to="/monetization"
-            className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
-          >
-            <span className="icon">
-              <IconMonetization />
-            </span>
+          <NavLink to="/monetization" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+            <span className="icon"><IconMonetization /></span>
             MONETIZATION
           </NavLink>
         </li>
       </ul>
 
       <div className="sidebar-footer">
-        <h2 className="brand-logo">JOKO</h2>
+        <img src="/jokologo.png" alt="Joko" className="brand-logo" />
+        <button type="button" className="logout-btn" onClick={onLogout} aria-label="Sign out">
+          <IconLogout />
+          <span>Sign Out</span>
+        </button>
       </div>
     </nav>
   );

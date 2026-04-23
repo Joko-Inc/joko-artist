@@ -83,6 +83,7 @@
   padding: 18px 24px;
   color: rgba(255, 255, 255, 0.88);
   text-decoration: none;
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 1px;
@@ -116,14 +117,48 @@
 /* --- Bottom Footer --- */
 .sidebar-footer {
   padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.logout-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 80, 80, 0.1);
+  border-color: rgba(255, 80, 80, 0.25);
+  color: #ff6b6b;
 }
 
 .brand-logo {
-  color: white;
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 2px;
-  margin: 0;
+  max-width: 120px;
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
 }
 
 .divider {

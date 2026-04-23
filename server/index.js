@@ -2,8 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import Database from 'better-sqlite3';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+// Use an env var in production: JWT_SECRET=<random-secret> node server/index.js
+const JWT_SECRET = process.env.JWT_SECRET ?? 'joko-dev-secret-change-in-production';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new Database(path.join(__dirname, '../database/database.sqlite'));
@@ -21,6 +26,36 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
+
+// Seed test artist on startup if not already present
+const existing = db.prepare("SELECT id FROM Artist WHERE username = 'testuser'").get();
+if (!existing) {
+  const hash = bcrypt.hashSync('testpassword', 10);
+  db.prepare(`
+    INSERT INTO Artist (name, username, password_hash)
+    VALUES ('Irawo Ayotunde', 'testuser', ?)
+  `).run(hash);
+  console.log('Seeded test artist: testuser');
+}
+
+// POST /api/auth/login
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+
+  const artist = db.prepare('SELECT * FROM Artist WHERE username = ?').get(username);
+  if (!artist || !artist.password_hash) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const valid = bcrypt.compareSync(password, artist.password_hash);
+  if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const token = jwt.sign(
+    { id: artist.id, username: artist.username, name: artist.name },
+    JWT_SECRET,
+    { expiresIn: '7d' },
+  );
+  res.json({ token });
+});
 const uploadFields = upload.fields([{ name: 'file', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]);
 
 // POST /api/posts — create or save-draft a post

@@ -77,3 +77,17 @@ TOO RUN - npm run server
           npm run dev
 
 Extentions: SQLite, SQLite Viewer
+
+# Commit Notes
+
+## Commit April 22nd 
+
+Created basic authentication code for user testing; will be updated once onboarding screens are produced.
+- Installed bcryptjs and jsonwebtoken to hash passwords in database
+- Simple login screen (not final product)
+- No registration screen (as it will be done with unique artist link that sends to onboarding)
+- No 'forgot password' as this is purely for testing purposes
+
+Added additional styling to better match Figma prototype
+- Downloading Moonrising and Montserrat fonts (Moonrising is a paid font so we'll have to discuss this later)
+- Added Joko logo to tab bar
