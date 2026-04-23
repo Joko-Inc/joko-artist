@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Database and uploads (use Render persistent disk)
+database/database.sqlite
+public/uploads/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

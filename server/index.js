@@ -6,20 +6,30 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 // Use an env var in production: JWT_SECRET=<random-secret> node server/index.js
 const JWT_SECRET = process.env.JWT_SECRET ?? 'joko-dev-secret-change-in-production';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database(path.join(__dirname, '../database/database.sqlite'));
+
+// On Render, mount a persistent disk at /data and set DATA_DIR=/data
+// Locally this falls back to the database/ folder in the project root
+const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, '../database');
+const UPLOADS_DIR = process.env.UPLOADS_DIR ?? path.join(__dirname, '../public/uploads');
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+const db = new Database(path.join(DATA_DIR, 'database.sqlite'));
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 const storage = multer.diskStorage({
-  destination: path.join(__dirname, '../public/uploads'),
+  destination: UPLOADS_DIR,
   filename: (_req, file, cb) => {
     const unique = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
     cb(null, unique + path.extname(file.originalname));
@@ -172,5 +182,12 @@ app.patch('/api/posts/:id', (req, res) => {
   res.json(db.prepare('SELECT * FROM Post WHERE id = ?').get(id));
 });
 
-const PORT = 3001;
-app.listen(PORT, () => console.log(`API server running on http://localhost:${PORT}`));
+// Serve the built React app in production
+const distDir = path.join(__dirname, '../dist');
+app.use(express.static(distDir));
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(distDir, 'index.html'));
+});
+
+const PORT = process.env.PORT ?? 3001;
+app.listen(PORT, () => console.log(`API server running on port ${PORT}`));
