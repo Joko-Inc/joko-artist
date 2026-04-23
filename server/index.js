@@ -18,10 +18,46 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, '../database');
 const UPLOADS_DIR = process.env.UPLOADS_DIR ?? path.join(__dirname, '../public/uploads');
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const db = new Database(path.join(DATA_DIR, 'database.sqlite'));
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS Artist (
+    id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    name            TEXT NOT NULL,
+    profile_pic_url TEXT,
+    avg_sub_amount  REAL NOT NULL DEFAULT 0.0,
+    engagement      REAL NOT NULL DEFAULT 0.0,
+    total_views     INTEGER NOT NULL DEFAULT 0,
+    monthly_revenue REAL NOT NULL DEFAULT 0.0,
+    username        TEXT,
+    password_hash   TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_artist_username ON Artist(username);
+
+  CREATE TABLE IF NOT EXISTS Post (
+    id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    artist_id     TEXT,
+    name          TEXT NOT NULL,
+    description   TEXT,
+    thumbnail_url TEXT,
+    file_type     TEXT NOT NULL,
+    file_url      TEXT,
+    category      TEXT,
+    posted_date   TEXT,
+    status        TEXT NOT NULL DEFAULT 'draft',
+    review_status TEXT,
+    visible_to_fans INTEGER DEFAULT 0,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (artist_id) REFERENCES Artist(id)
+  );
+`);
+
 const app = express();
 
 app.use(cors());
@@ -185,7 +221,7 @@ app.patch('/api/posts/:id', (req, res) => {
 // Serve the built React app in production
 const distDir = path.join(__dirname, '../dist');
 app.use(express.static(distDir));
-app.get('*', (_req, res) => {
+app.get('/{*path}', (_req, res) => {
   res.sendFile(path.join(distDir, 'index.html'));
 });
 
