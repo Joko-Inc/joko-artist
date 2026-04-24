@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import './Monetization.css';
+
+const AVAILABLE_BALANCE = 12_000;
 
 function BalanceChart() {
   /* 12 points, sharp peaks/valleys — minimal chart, no grid */
@@ -86,7 +89,45 @@ const TRANSACTIONS = [
   { id: '5', label: 'Merchandise Sale', amount: '$54.00', direction: 'in' as const, Icon: IconMerch },
 ];
 
+function parseAmountInput(raw: string): number | null {
+  const cleaned = raw.replace(/[$,\s]/g, '');
+  if (!cleaned) return null;
+  const n = Number.parseFloat(cleaned);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export default function Monetization() {
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [amountInput, setAmountInput] = useState('');
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [transferOk, setTransferOk] = useState<string | null>(null);
+
+  const closeTransfer = () => {
+    setTransferOpen(false);
+    setAmountInput('');
+    setTransferError(null);
+    setTransferOk(null);
+  };
+
+  const submitTransfer = () => {
+    setTransferError(null);
+    setTransferOk(null);
+    const n = parseAmountInput(amountInput);
+    if (n === null) {
+      setTransferError('Enter a valid amount.');
+      return;
+    }
+    if (n > AVAILABLE_BALANCE) {
+      setTransferError('Amount exceeds your available balance.');
+      return;
+    }
+    setTransferOk('Transfer submitted.');
+    setAmountInput('');
+    setTimeout(() => {
+      closeTransfer();
+    }, 1200);
+  };
+
   return (
     <div className="monet-page">
       <header className="monet-header">
@@ -100,7 +141,15 @@ export default function Monetization() {
       </section>
 
       <div className="monet-actions">
-        <button type="button" className="monet-transfer">
+        <button
+          type="button"
+          className="monet-transfer"
+          onClick={() => {
+            setTransferOpen(true);
+            setTransferError(null);
+            setTransferOk(null);
+          }}
+        >
           Transfer Money
         </button>
         <button type="button" className="monet-wallet">
@@ -108,6 +157,40 @@ export default function Monetization() {
           Manage Wallet
         </button>
       </div>
+
+      {transferOpen && (
+        <section className="monet-transfer-inline" aria-labelledby="transfer-inline-title">
+          <h2 id="transfer-inline-title" className="monet-transfer-inline-title">
+            Transfer money
+          </h2>
+          <p className="monet-transfer-inline-desc">
+            Enter the amount you want to transfer from your balance. Wallet verification is no longer required.
+          </p>
+          <div className="monet-transfer-field">
+            <label htmlFor="transfer-amount">Amount</label>
+            <input
+              id="transfer-amount"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="$ 0.00"
+              value={amountInput}
+              onChange={(e) => setAmountInput(e.target.value)}
+            />
+            <p className="monet-transfer-hint">Available balance: ${AVAILABLE_BALANCE.toLocaleString('en-US')}</p>
+          </div>
+          {transferError && <p className="monet-transfer-msg monet-transfer-msg--error">{transferError}</p>}
+          {transferOk && <p className="monet-transfer-msg monet-transfer-msg--ok">{transferOk}</p>}
+          <div className="monet-transfer-inline-actions">
+            <button type="button" className="monet-transfer-cancel" onClick={closeTransfer}>
+              Cancel
+            </button>
+            <button type="button" className="monet-transfer-submit" onClick={submitTransfer}>
+              Confirm transfer
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="monet-tx-panel">
         <h2 className="monet-tx-title">Recent Transactions</h2>

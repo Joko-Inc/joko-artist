@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import "./StatCard.css";
 
-type StatTone = "blue" | "green" | "purple" | "teal" | "yellow";
+type StatTone = "blue" | "green" | "purple" | "teal" | "yellow" | "red";
 
 export function StatCard({
   label,

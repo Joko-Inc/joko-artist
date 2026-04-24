@@ -115,6 +115,127 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* In-page transfer form (replaces modal + wallet verification) */
+.monet-transfer-inline {
+  margin: -12px 0 28px;
+  padding: 22px 22px 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(46, 46, 56, 0.95);
+  background: #14141c;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.monet-transfer-inline-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.monet-transfer-inline-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.monet-transfer-field {
+  margin-bottom: 14px;
+}
+
+.monet-transfer-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 8px;
+}
+
+.monet-transfer-field input {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid rgba(60, 60, 72, 0.95);
+  background: #0d0d12;
+  color: #fff;
+  font-size: 15px;
+  padding: 12px 14px;
+  font-family: inherit;
+}
+
+.monet-transfer-field input:focus {
+  outline: none;
+  border-color: rgba(157, 80, 255, 0.45);
+  box-shadow: 0 0 0 2px rgba(157, 80, 255, 0.12);
+}
+
+.monet-transfer-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.monet-transfer-msg {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.monet-transfer-msg--error {
+  color: #f87171;
+}
+
+.monet-transfer-msg--ok {
+  color: #4ade80;
+}
+
+.monet-transfer-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.monet-transfer-cancel {
+  appearance: none;
+  border: 1px solid rgba(157, 80, 255, 0.45);
+  border-radius: 10px;
+  padding: 12px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.88);
+  background: transparent;
+  cursor: pointer;
+}
+
+.monet-transfer-cancel:hover {
+  background: rgba(157, 80, 255, 0.08);
+}
+
+.monet-transfer-submit {
+  appearance: none;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(180deg, #a855f7 0%, #7c3aed 100%);
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.35);
+}
+
+.monet-transfer-submit:hover {
+  filter: brightness(1.06);
+}
+
 .monet-tx-panel {
   border: 1px solid rgba(46, 46, 56, 0.95);
   border-radius: 12px;

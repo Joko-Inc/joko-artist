@@ -85,6 +85,12 @@
   box-shadow: 0 4px 14px rgba(217, 119, 6, 0.4);
 }
 
+.stat-card-icon--red {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.45);
+}
+
 .stat-value {
   font-size: 40px;
   font-weight: 700;
