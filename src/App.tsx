@@ -4,6 +4,7 @@ import './App.css';
 import { Navbar } from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import Create from './pages/Create';
+import Scheduled from './pages/Scheduled';
 import Analytics from './pages/Analytics';
 import Monetization from './pages/Monetization';
 import Login from './pages/Login';
@@ -32,6 +33,7 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/create" element={<Create />} />
+            <Route path="/scheduled" element={<Scheduled />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/monetization" element={<Monetization />} />
           </Routes>

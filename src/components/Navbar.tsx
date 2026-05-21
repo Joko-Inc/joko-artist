@@ -22,6 +22,15 @@ function IconCreate() {
   );
 }
 
+function IconScheduled() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  );
+}
+
 function IconAnalytics() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
@@ -82,6 +91,12 @@ export const Navbar = ({ onLogout }: { onLogout: () => void }) => {
           <NavLink to="/create" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
             <span className="icon"><IconCreate /></span>
             CREATE
+          </NavLink>
+        </li>
+        <li>
+          <NavLink to="/scheduled" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+            <span className="icon"><IconScheduled /></span>
+            SCHEDULED
           </NavLink>
         </li>
         <li>

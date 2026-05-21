@@ -1,43 +1,7 @@
-import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import './Create.css';
 
-type CreateTab = 'scheduled' | 'create' | 'review';
-
-const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-
-const MONTH_NAMES = [
-  'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
-  'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
-];
-
-type CalendarEvent = {
-  day: number;
-  title: string;
-  time: string;
-  variant: 'orange' | 'purple' | 'mustard';
-};
-
-/** Demo schedule — keyed by month index 0–11 and day */
-const SCHEDULED_EVENTS: Record<string, CalendarEvent[]> = {
-  '2026-1': [
-    { day: 6, title: 'Track Demo', time: '12:00pm', variant: 'orange' },
-    { day: 11, title: 'Studio Session Stream', time: '3:00pm', variant: 'purple' },
-    { day: 23, title: 'Album Announcement', time: '1:00pm', variant: 'mustard' },
-  ],
-};
-
-function buildCalendarGrid(year: number, month: number): ({ day: number } | null)[] {
-  const first = new Date(year, month, 1);
-  const last = new Date(year, month + 1, 0);
-  const startPad = (first.getDay() + 6) % 7;
-  const daysInMonth = last.getDate();
-  const cells: ({ day: number } | null)[] = [];
-  for (let i = 0; i < startPad; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d });
-  const total = Math.ceil(cells.length / 7) * 7;
-  while (cells.length < total) cells.push(null);
-  return cells;
-}
+type CreateTab = 'create' | 'review';
 
 function IconUpload() {
   return (
@@ -90,67 +54,6 @@ function IconVideoSmall() {
   );
 }
 
-function ScheduledView({ year, month, onPrev, onNext }: {
-  year: number;
-  month: number;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  const cells = useMemo(() => buildCalendarGrid(year, month), [year, month]);
-  const key = `${year}-${month}`;
-  const events = SCHEDULED_EVENTS[key] ?? [];
-
-  const eventsByDay = useMemo(() => {
-    const m = new Map<number, CalendarEvent[]>();
-    for (const e of events) {
-      const list = m.get(e.day) ?? [];
-      list.push(e);
-      m.set(e.day, list);
-    }
-    return m;
-  }, [events]);
-
-  return (
-    <div className="calendar-shell">
-      <div className="calendar-nav">
-        <button type="button" onClick={onPrev} aria-label="Previous month">
-          ‹
-        </button>
-        <div className="calendar-month-label">{MONTH_NAMES[month]}</div>
-        <button type="button" onClick={onNext} aria-label="Next month">
-          ›
-        </button>
-      </div>
-      <div className="calendar-weekdays">
-        {WEEKDAYS.map((d) => (
-          <span key={d}>{d}</span>
-        ))}
-      </div>
-      <div className="calendar-grid">
-        {cells.map((cell, i) => {
-          if (!cell) {
-            return <div key={`e-${i}`} className="calendar-cell calendar-cell--empty" />;
-          }
-          const dayEvents = eventsByDay.get(cell.day) ?? [];
-          return (
-            <div key={cell.day} className="calendar-cell">
-              <span className="calendar-day-num">{String(cell.day).padStart(2, '0')}</span>
-              {dayEvents.map((ev) => (
-                <div
-                  key={ev.title + ev.time}
-                  className={`calendar-event calendar-event--${ev.variant}`}
-                >
-                  <span>{ev.title}</span>
-                  <span>{ev.time}</span>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 type ContentKind = 'social' | 'video' | 'audio' | 'merch';
 
@@ -471,8 +374,7 @@ const KIND_LABEL: Record<ContentKind, string> = {
   merch: 'Merchandise',
 };
 
-function InReviewView({ showToast }: { showToast: boolean }) {
-  const [toastOpen, setToastOpen] = useState(showToast);
+function InReviewView({ showToast, onDismissToast }: { showToast: boolean; onDismissToast: () => void }) {
   const [posts, setPosts] = useState<Post[]>([]);
 
   const fetchPosts = useCallback(async () => {
@@ -483,7 +385,6 @@ function InReviewView({ showToast }: { showToast: boolean }) {
   }, []);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
-  useEffect(() => { setToastOpen(showToast); }, [showToast]);
 
   const deletePost = async (id: string) => {
     await fetch(`/api/posts/${id}`, { method: 'DELETE' });
@@ -495,7 +396,7 @@ function InReviewView({ showToast }: { showToast: boolean }) {
 
   return (
     <div className="inreview-wrap">
-      {toastOpen && (
+      {showToast && (
         <div className="inreview-toast" role="status">
           <div>
             <p>
@@ -503,13 +404,13 @@ function InReviewView({ showToast }: { showToast: boolean }) {
               <small>Your work will be reviewed soon.</small>
             </p>
           </div>
-          <button type="button" className="inreview-toast-close" onClick={() => setToastOpen(false)} aria-label="Dismiss notification">
+          <button type="button" className="inreview-toast-close" onClick={onDismissToast} aria-label="Dismiss notification">
             ×
           </button>
         </div>
       )}
 
-      <div className="inreview-list" style={{ marginTop: toastOpen ? 56 : 8 }}>
+      <div className="inreview-list" style={{ marginTop: showToast ? 56 : 8 }}>
         {posts.length === 0 && <p style={{ opacity: 0.5, fontSize: 14 }}>No posts submitted for review yet.</p>}
         {posts.map((post) => {
           const Icon = KIND_ICONS[post.file_type] ?? IconVideoSmall;
@@ -573,54 +474,19 @@ function InReviewView({ showToast }: { showToast: boolean }) {
 }
 
 export default function Create() {
-  const [tab, setTab] = useState<CreateTab>('scheduled');
+  const [tab, setTab] = useState<CreateTab>('create');
   const [showToast, setShowToast] = useState(false);
 
   const handleSubmitSuccess = () => {
     setShowToast(true);
     setTab('review');
   };
-  const now = new Date();
-  const [viewYear, setViewYear] = useState(now.getFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getMonth());
-
-  const goPrevMonth = () => {
-    setViewMonth((m) => {
-      if (m === 0) {
-        setViewYear((y) => y - 1);
-        return 11;
-      }
-      return m - 1;
-    });
-  };
-
-  const goNextMonth = () => {
-    setViewMonth((m) => {
-      if (m === 11) {
-        setViewYear((y) => y + 1);
-        return 0;
-      }
-      return m + 1;
-    });
-  };
-
-  const headerTitle =
-    tab === 'scheduled' ? 'My Schedule' : 'Create';
 
   return (
     <div className="create-page">
       <header className="create-header">
-        <h1 className="create-title">{headerTitle}</h1>
+        <h1 className="create-title">Create</h1>
         <div className="create-segment" role="tablist" aria-label="Create workspace">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'scheduled'}
-            className={tab === 'scheduled' ? 'create-segment--active' : ''}
-            onClick={() => setTab('scheduled')}
-          >
-            Scheduled
-          </button>
           <button
             type="button"
             role="tab"
@@ -642,11 +508,10 @@ export default function Create() {
         </div>
       </header>
 
-      {tab === 'scheduled' && (
-        <ScheduledView year={viewYear} month={viewMonth} onPrev={goPrevMonth} onNext={goNextMonth} />
-      )}
       {tab === 'create' && <CreateFormView onSubmitSuccess={handleSubmitSuccess} />}
-      {tab === 'review' && <InReviewView showToast={showToast} />}
+      {tab === 'review' && (
+        <InReviewView showToast={showToast} onDismissToast={() => setShowToast(false)} />
+      )}
     </div>
   );
 }

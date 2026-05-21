@@ -149,7 +149,6 @@ const Dashboard = () => {
                 </div>
                 <div className="recent-stats">
                   <div><strong>—</strong> Views</div>
-                  <div><strong>—</strong> Likes</div>
                   <div><strong>—</strong> New Fans</div>
                 </div>
               </article>

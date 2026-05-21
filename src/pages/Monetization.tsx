@@ -163,9 +163,7 @@ export default function Monetization() {
           <h2 id="transfer-inline-title" className="monet-transfer-inline-title">
             Transfer money
           </h2>
-          <p className="monet-transfer-inline-desc">
-            Enter the amount you want to transfer from your balance. Wallet verification is no longer required.
-          </p>
+          <p className="monet-transfer-inline-desc">Enter the amount you want to transfer from your balance.</p>
           <div className="monet-transfer-field">
             <label htmlFor="transfer-amount">Amount</label>
             <input

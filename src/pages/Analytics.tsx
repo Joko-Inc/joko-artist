@@ -306,9 +306,9 @@ function NewReturningChart() {
 }
 
 const RECENT_ROWS = [
-  { views: '22,743', likes: '7,532', comments: '3,400', fans: '56' },
-  { views: '22,743', likes: '7,532', comments: '3,400', fans: '56' },
-  { views: '22,743', likes: '7,532', comments: '3,400', fans: '56' },
+  { views: '22,743', comments: '3,400', fans: '56' },
+  { views: '22,743', comments: '3,400', fans: '56' },
+  { views: '22,743', comments: '3,400', fans: '56' },
 ];
 
 const TOP_CITIES = [
@@ -350,10 +350,6 @@ function OverviewTab() {
               <div className="analytics-metric">
                 Views
                 <strong>{row.views}</strong>
-              </div>
-              <div className="analytics-metric">
-                Likes
-                <strong>{row.likes}</strong>
               </div>
               <div className="analytics-metric">
                 Comments
