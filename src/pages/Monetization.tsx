@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getToken } from '../auth';
 import './Monetization.css';
-
-const AVAILABLE_BALANCE = 12_000;
 
 function BalanceChart() {
   /* 12 points, sharp peaks/valleys — minimal chart, no grid */
@@ -21,7 +20,11 @@ function BalanceChart() {
   ];
   const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]},${p[1]}`).join(' ');
 
-  const labels = ['FEB 1', 'FEB 2', 'FEB 3', 'FEB 4', 'FEB 5', 'FEB 6', 'FEB 7', 'FEB 8', 'FEB 9', 'FEB 10', 'FEB 11', 'FEB 12'];
+  const labels = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (11 - i));
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
+  });
 
   return (
     <div className="monet-chart-wrap">
@@ -89,44 +92,86 @@ const TRANSACTIONS = [
   { id: '5', label: 'Merchandise Sale', amount: '$54.00', direction: 'in' as const, Icon: IconMerch },
 ];
 
-function parseAmountInput(raw: string): number | null {
-  const cleaned = raw.replace(/[$,\s]/g, '');
-  if (!cleaned) return null;
-  const n = Number.parseFloat(cleaned);
-  return Number.isFinite(n) && n > 0 ? n : null;
+interface WalletInfo {
+  walletAddress: string | null;
+  circleWalletId: string | null;
+  walletChain: string | null;
+  balance: unknown;
 }
 
+type ModalStatus = { type: 'success' | 'error'; message: string } | null;
+
 export default function Monetization() {
+  const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
-  const [amountInput, setAmountInput] = useState('');
-  const [transferError, setTransferError] = useState<string | null>(null);
-  const [transferOk, setTransferOk] = useState<string | null>(null);
+  const [walletOpen, setWalletOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [newWalletAddress, setNewWalletAddress] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<ModalStatus>(null);
 
-  const closeTransfer = () => {
-    setTransferOpen(false);
-    setAmountInput('');
-    setTransferError(null);
-    setTransferOk(null);
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    fetch('/api/wallet', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setWalletInfo(data); })
+      .catch(() => {});
+  }, []);
+
+  const handleConnectWallet = async () => {
+    const trimmedAddr = newWalletAddress.trim();
+    if (!trimmedAddr) return;
+    setLoading(true);
+    setStatus(null);
+    try {
+      const r = await fetch('/api/wallet/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ walletAddress: trimmedAddr }),
+      });
+      if (r.ok) {
+        setWalletInfo((prev) => ({ ...prev!, walletAddress: trimmedAddr }));
+        setStatus({ type: 'success', message: 'Wallet saved successfully.' });
+        setNewWalletAddress('');
+      } else {
+        const d = await r.json();
+        setStatus({ type: 'error', message: d.error ?? 'Failed to save wallet.' });
+      }
+    } catch {
+      setStatus({ type: 'error', message: 'Network error. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const submitTransfer = () => {
-    setTransferError(null);
-    setTransferOk(null);
-    const n = parseAmountInput(amountInput);
-    if (n === null) {
-      setTransferError('Enter a valid amount.');
-      return;
+  const handleWithdraw = async () => {
+    const amt = Number(withdrawAmount);
+    if (!withdrawAmount || isNaN(amt) || amt <= 0) return;
+    setLoading(true);
+    setStatus(null);
+    try {
+      const r = await fetch('/api/wallet/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ amount: withdrawAmount }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setStatus({ type: 'success', message: `Transfer of ${withdrawAmount} USDC initiated successfully.` });
+        setWithdrawAmount('');
+      } else {
+        setStatus({ type: 'error', message: d.error ?? 'Transfer failed.' });
+      }
+    } catch {
+      setStatus({ type: 'error', message: 'Network error. Please try again.' });
+    } finally {
+      setLoading(false);
     }
-    if (n > AVAILABLE_BALANCE) {
-      setTransferError('Amount exceeds your available balance.');
-      return;
-    }
-    setTransferOk('Transfer submitted.');
-    setAmountInput('');
-    setTimeout(() => {
-      closeTransfer();
-    }, 1200);
   };
+
+  const closeTransfer = () => { setTransferOpen(false); setStatus(null); setWithdrawAmount(''); };
+  const closeWallet = () => { setWalletOpen(false); setStatus(null); setNewWalletAddress(''); };
 
   return (
     <div className="monet-page">
@@ -144,51 +189,19 @@ export default function Monetization() {
         <button
           type="button"
           className="monet-transfer"
-          onClick={() => {
-            setTransferOpen(true);
-            setTransferError(null);
-            setTransferOk(null);
-          }}
+          onClick={() => { setTransferOpen(true); setStatus(null); }}
         >
           Transfer Money
         </button>
-        <button type="button" className="monet-wallet">
+        <button
+          type="button"
+          className="monet-wallet"
+          onClick={() => { setWalletOpen(true); setStatus(null); }}
+        >
           <IconWallet />
           Manage Wallet
         </button>
       </div>
-
-      {transferOpen && (
-        <section className="monet-transfer-inline" aria-labelledby="transfer-inline-title">
-          <h2 id="transfer-inline-title" className="monet-transfer-inline-title">
-            Transfer money
-          </h2>
-          <p className="monet-transfer-inline-desc">Enter the amount you want to transfer from your balance.</p>
-          <div className="monet-transfer-field">
-            <label htmlFor="transfer-amount">Amount</label>
-            <input
-              id="transfer-amount"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="$ 0.00"
-              value={amountInput}
-              onChange={(e) => setAmountInput(e.target.value)}
-            />
-            <p className="monet-transfer-hint">Available balance: ${AVAILABLE_BALANCE.toLocaleString('en-US')}</p>
-          </div>
-          {transferError && <p className="monet-transfer-msg monet-transfer-msg--error">{transferError}</p>}
-          {transferOk && <p className="monet-transfer-msg monet-transfer-msg--ok">{transferOk}</p>}
-          <div className="monet-transfer-inline-actions">
-            <button type="button" className="monet-transfer-cancel" onClick={closeTransfer}>
-              Cancel
-            </button>
-            <button type="button" className="monet-transfer-submit" onClick={submitTransfer}>
-              Confirm transfer
-            </button>
-          </div>
-        </section>
-      )}
 
       <section className="monet-tx-panel">
         <h2 className="monet-tx-title">Recent Transactions</h2>
@@ -210,6 +223,96 @@ export default function Monetization() {
           );
         })}
       </section>
+
+      {/* Transfer Money Modal */}
+      {transferOpen && (
+        <div className="monet-modal-overlay" onClick={closeTransfer}>
+          <div className="monet-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="monet-modal-header">
+              <span className="monet-modal-title">Transfer Money</span>
+              <button className="monet-modal-close" onClick={closeTransfer} aria-label="Close">✕</button>
+            </div>
+            <div className="monet-modal-body">
+              {walletInfo?.walletAddress ? (
+                <div className="monet-modal-info">
+                  <span className="monet-modal-info-label">Destination (USDC)</span>
+                  <span className="monet-modal-info-value monet-addr">{walletInfo.walletAddress}</span>
+                </div>
+              ) : (
+                <p className="monet-modal-warning">
+                  No withdrawal wallet connected. Add one via Manage Wallet first.
+                </p>
+              )}
+              <label className="monet-modal-label" htmlFor="withdraw-amount">Amount (USDC)</label>
+              <input
+                id="withdraw-amount"
+                className="monet-modal-input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                disabled={!walletInfo?.walletAddress || loading}
+              />
+              {status && (
+                <p className={`monet-modal-status monet-modal-status--${status.type}`}>{status.message}</p>
+              )}
+              <button
+                className="monet-modal-btn-primary"
+                onClick={handleWithdraw}
+                disabled={!walletInfo?.walletAddress || !withdrawAmount || loading}
+              >
+                {loading ? 'Processing…' : 'Confirm Transfer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Wallet Modal */}
+      {walletOpen && (
+        <div className="monet-modal-overlay" onClick={closeWallet}>
+          <div className="monet-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="monet-modal-header">
+              <span className="monet-modal-title">Manage Wallet</span>
+              <button className="monet-modal-close" onClick={closeWallet} aria-label="Close">✕</button>
+            </div>
+            <div className="monet-modal-body">
+              {walletInfo?.walletAddress ? (
+                <div className="monet-modal-info">
+                  <span className="monet-modal-info-label">USDC Withdrawal Address</span>
+                  <span className="monet-modal-info-value monet-addr">{walletInfo.walletAddress}</span>
+                </div>
+              ) : (
+                <p className="monet-modal-warning">No withdrawal address set yet.</p>
+              )}
+              <label className="monet-modal-label" htmlFor="wallet-address">
+                {walletInfo?.walletAddress ? 'Update' : 'Set'} USDC Withdrawal Address
+              </label>
+              <input
+                id="wallet-address"
+                className="monet-modal-input"
+                type="text"
+                placeholder="Your USDC wallet address"
+                value={newWalletAddress}
+                onChange={(e) => setNewWalletAddress(e.target.value)}
+                disabled={loading}
+              />
+              {status && (
+                <p className={`monet-modal-status monet-modal-status--${status.type}`}>{status.message}</p>
+              )}
+              <button
+                className="monet-modal-btn-primary"
+                onClick={handleConnectWallet}
+                disabled={!newWalletAddress.trim() || loading}
+              >
+                {loading ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

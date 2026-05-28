@@ -73,6 +73,24 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Add wallet columns if they don't exist yet (idempotent migrations)
+for (const col of ['wallet_address', 'circle_wallet_id', 'wallet_chain']) {
+  try { db.exec(`ALTER TABLE Artist ADD COLUMN ${col} TEXT`); } catch {}
+}
+
+const PAYMENTS_URL = process.env.PAYMENTS_URL ?? 'http://localhost:5001';
+
+function requireAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    req.user = jwt.verify(auth.slice(7), JWT_SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
 // Seed test artist on startup if not already present
 const existing = db.prepare("SELECT id FROM Artist WHERE username = 'testuser'").get();
 if (!existing) {
@@ -102,6 +120,80 @@ app.post('/api/auth/login', (req, res) => {
   );
   res.json({ token });
 });
+// GET /api/wallet — return artist wallet info + proxied Circle balance
+app.get('/api/wallet', requireAuth, async (req, res) => {
+  const artist = db.prepare('SELECT wallet_address, circle_wallet_id, wallet_chain FROM Artist WHERE id = ?').get(req.user.id);
+  if (!artist) return res.status(404).json({ error: 'Artist not found' });
+
+  let balance = null;
+  if (artist.circle_wallet_id) {
+    try {
+      const r = await fetch(`${PAYMENTS_URL}/joko/wallet/balance/${artist.circle_wallet_id}`);
+      if (r.ok) balance = await r.json();
+    } catch {}
+  }
+
+  res.json({
+    walletAddress: artist.wallet_address ?? null,
+    circleWalletId: artist.circle_wallet_id ?? null,
+    walletChain: artist.wallet_chain ?? null,
+    balance,
+  });
+});
+
+// POST /api/wallet/connect — save artist's external wallet address and/or Circle wallet ID
+app.post('/api/wallet/connect', requireAuth, (req, res) => {
+  const { walletAddress, circleWalletId, walletChain } = req.body;
+  if (!walletAddress && !circleWalletId && !walletChain) {
+    return res.status(400).json({ error: 'walletAddress, circleWalletId, or walletChain required' });
+  }
+
+  const sets = [];
+  const params = [];
+  if (walletAddress) { sets.push('wallet_address = ?'); params.push(walletAddress); }
+  if (circleWalletId) { sets.push('circle_wallet_id = ?'); params.push(circleWalletId); }
+  if (walletChain) { sets.push('wallet_chain = ?'); params.push(walletChain); }
+  params.push(req.user.id);
+
+  db.prepare(`UPDATE Artist SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  res.json({ success: true });
+});
+
+// POST /api/wallet/withdraw — transfer USDC from Circle platform wallet to artist's external address
+app.post('/api/wallet/withdraw', requireAuth, async (req, res) => {
+  const { amount } = req.body;
+  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    return res.status(400).json({ error: 'Valid amount required' });
+  }
+
+  const artist = db.prepare('SELECT wallet_address, circle_wallet_id FROM Artist WHERE id = ?').get(req.user.id);
+  if (!artist?.circle_wallet_id) {
+    return res.status(400).json({ error: 'No Circle wallet linked to your account. Contact support.' });
+  }
+  if (!artist?.wallet_address) {
+    return res.status(400).json({ error: 'No withdrawal address connected. Add one in Manage Wallet first.' });
+  }
+
+  try {
+    const r = await fetch(`${PAYMENTS_URL}/joko/wallet/charge-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        payerWalletId: artist.circle_wallet_id,
+        recipientWalletAddress: artist.wallet_address,
+        tokenId: process.env.USDC_TOKEN_ID ?? '',
+        amount: String(amount),
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json(data);
+    res.json({ success: true, transaction: data });
+  } catch (err) {
+    console.error('Withdraw error:', err);
+    res.status(500).json({ error: 'Transfer failed. Please try again.' });
+  }
+});
+
 const uploadFields = upload.fields([{ name: 'file', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]);
 
 // POST /api/posts — create or save-draft a post
