@@ -259,11 +259,18 @@ app.post('/api/auth/onboard', onboardUpload, async (req, res) => {
     return res.status(400).json({ error: 'Username must be 3–32 characters (letters, numbers, underscores)' });
   }
 
+  const emailTaken = db.prepare(
+    'SELECT id FROM Artist WHERE email IS NOT NULL AND LOWER(email) = LOWER(?)',
+  ).get(email);
+  if (emailTaken) {
+    return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
+  }
+
   const usernameTaken = db.prepare(
-    'SELECT id FROM Artist WHERE username = ? AND email != ?',
-  ).get(username, email);
+    'SELECT id FROM Artist WHERE username IS NOT NULL AND LOWER(username) = LOWER(?)',
+  ).get(username);
   if (usernameTaken) {
-    return res.status(409).json({ error: 'Username is already taken' });
+    return res.status(409).json({ error: 'Username is already taken.' });
   }
 
   const profilePicUrl = req.files?.profilePic?.[0]
@@ -274,45 +281,6 @@ app.post('/api/auth/onboard', onboardUpload, async (req, res) => {
   const name = [firstName, lastName].filter(Boolean).join(' ');
   const passwordHash = bcrypt.hashSync(password, 10);
   const slug = username.toLowerCase();
-
-  const existing = db.prepare('SELECT * FROM Artist WHERE email = ?').get(email);
-
-  if (existing) {
-    if (existing.password_hash && existing.email_verified === '1') {
-      return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
-    }
-    const aestheticUrls = newAestheticUrls
-      ?? existing.aesthetic_urls
-      ?? null;
-    db.prepare(`
-      UPDATE Artist SET
-        name = ?, first_name = ?, last_name = ?, artist_name = ?,
-        username = ?, slug = ?, password_hash = ?,
-        profile_pic_url = COALESCE(?, profile_pic_url),
-        location = ?, phone = ?, artist_statement = ?,
-        website = ?, instagram = ?, twitter = ?,
-        music_links = ?, other_links = ?,
-        aesthetic_urls = COALESCE(?, aesthetic_urls),
-        email_verified = '0',
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      name, firstName, lastName, name, username, slug, passwordHash, profilePicUrl,
-      location ?? null, phone ?? null, artistStatement ?? null,
-      website ?? null, instagram ?? null, twitter ?? null,
-      musicLinks ?? null, otherLinks ?? null,
-      aestheticUrls,
-      existing.id,
-    );
-    const artist = db.prepare('SELECT * FROM Artist WHERE id = ?').get(existing.id);
-    const emailResult = await sendArtistVerificationEmail(artist);
-    return res.json({
-      success: true,
-      artistId: existing.id,
-      emailSent: emailResult.sent,
-      ...(emailResult.verifyUrl && { verifyUrl: emailResult.verifyUrl }),
-    });
-  }
 
   const result = db.prepare(`
     INSERT INTO Artist (

@@ -81,13 +81,9 @@ export default function Onboarding() {
   const [error, setError] = useState<string | null>(null);
   const [devVerifyUrl, setDevVerifyUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
+  const [signMessage, setSignMessage] = useState('');
 
   const aestheticInputRef = useRef<HTMLInputElement>(null);
-
-  const signMessage = selectedWallet
-    ? `Verify wallet ownership for Joko Artist\nWallet: ${selectedWallet}\nTimestamp: ${Date.now()}`
-    : 'Verify wallet ownership for Joko Artist';
 
   useEffect(() => {
     if (searchParams.get('verified') === '1') {
@@ -100,6 +96,13 @@ export default function Onboarding() {
     const timer = setTimeout(() => setStep('intro'), 2500);
     return () => clearTimeout(timer);
   }, [step]);
+
+  useEffect(() => {
+    if (step === 'wallet-verify') {
+      const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ').trim();
+      setSignMessage(name);
+    }
+  }, [step, profile.firstName, profile.lastName]);
 
   useEffect(() => {
     if (step === 'wallet-verifying') {
@@ -199,7 +202,6 @@ export default function Onboarding() {
   const handleWalletSkip = () => setStep('verify-pending');
 
   const handleWalletConnect = () => {
-    setSelectedWallet('External wallet');
     setStep('wallet-verify');
   };
 
@@ -217,9 +219,11 @@ export default function Onboarding() {
     </p>
   );
 
+  const usesCenterGlow = step === 'wallet-verify' || step === 'wallet-verifying';
+
   return (
     <div className="onboarding">
-      <div className="onboarding-glow" aria-hidden />
+      {!usesCenterGlow && <div className="onboarding-glow" aria-hidden />}
 
       {step === 'welcome' && (
         <div
@@ -459,19 +463,26 @@ export default function Onboarding() {
       )}
 
       {step === 'wallet-verify' && (
-        <div className="onboarding-inner">
+        <div className="onboarding-inner onboarding-inner--wallet">
+          <div className="onboarding-glow onboarding-glow--center" aria-hidden />
           <JokoLogo className="onboarding-logo" />
-          <div className="wallet-onboarding-center">
+          <div className="wallet-verify-stage">
             <h1 className="onboarding-heading wallet-onboarding-heading">
               Verify wallet identity
             </h1>
             <p className="wallet-verify-subtext">
-              To proceed, please sign a message with your wallet to prove you are the owner.
+              To proceed, please sign a message to verify ownership of your wallet.
             </p>
             <div className="wallet-message-box">
-              <p className="wallet-message-text">{signMessage}</p>
+              <textarea
+                className="wallet-message-input"
+                value={signMessage}
+                onChange={(e) => setSignMessage(e.target.value)}
+                placeholder="Sign Message"
+                rows={6}
+              />
             </div>
-            <button type="button" className="onboarding-btn wallet-sign-btn" onClick={handleSignMessage}>
+            <button type="button" className="wallet-sign-btn" onClick={handleSignMessage}>
               Sign message
             </button>
           </div>
@@ -482,8 +493,10 @@ export default function Onboarding() {
       )}
 
       {step === 'wallet-verifying' && (
-        <div className="onboarding-inner onboarding-inner--splash">
-          <div className="wallet-onboarding-splash">
+        <div className="onboarding-inner onboarding-inner--wallet onboarding-inner--splash">
+          <div className="onboarding-glow onboarding-glow--center onboarding-glow--intense" aria-hidden />
+          <JokoLogo className="onboarding-logo" />
+          <div className="wallet-verifying-stage">
             <h1 className="onboarding-heading wallet-onboarding-heading wallet-onboarding-heading--splash">
               Verifying your wallet…
             </h1>
