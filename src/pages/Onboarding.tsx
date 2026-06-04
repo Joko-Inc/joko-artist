@@ -2,8 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { JokoLogo } from '../components/JokoLogo';
 import './Onboarding.css';
+import './WalletOnboarding.css';
 
-type Step = 'welcome' | 'intro' | 'profile' | 'verify-pending' | 'verify-success';
+type Step =
+  | 'welcome'
+  | 'intro'
+  | 'profile'
+  | 'wallet-connect'
+  | 'wallet-verify'
+  | 'wallet-verifying'
+  | 'wallet-transition'
+  | 'wallet-welcome'
+  | 'verify-pending'
+  | 'verify-success';
 
 type ProfileData = {
   firstName: string;
@@ -48,6 +59,16 @@ function IconUpload() {
   );
 }
 
+function IconWalletConnect() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <rect x="2" y="6" width="20" height="14" rx="2" />
+      <path d="M2 10h20" />
+      <circle cx="17" cy="14" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -60,8 +81,13 @@ export default function Onboarding() {
   const [error, setError] = useState<string | null>(null);
   const [devVerifyUrl, setDevVerifyUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
 
   const aestheticInputRef = useRef<HTMLInputElement>(null);
+
+  const signMessage = selectedWallet
+    ? `Verify wallet ownership for Joko Artist\nWallet: ${selectedWallet}\nTimestamp: ${Date.now()}`
+    : 'Verify wallet ownership for Joko Artist';
 
   useEffect(() => {
     if (searchParams.get('verified') === '1') {
@@ -73,6 +99,17 @@ export default function Onboarding() {
     if (step !== 'welcome') return;
     const timer = setTimeout(() => setStep('intro'), 2500);
     return () => clearTimeout(timer);
+  }, [step]);
+
+  useEffect(() => {
+    if (step === 'wallet-verifying') {
+      const timer = setTimeout(() => setStep('wallet-transition'), 2200);
+      return () => clearTimeout(timer);
+    }
+    if (step === 'wallet-transition') {
+      const timer = setTimeout(() => setStep('wallet-welcome'), 2200);
+      return () => clearTimeout(timer);
+    }
   }, [step]);
 
   const updateField = (field: keyof ProfileData, value: string) => {
@@ -125,7 +162,7 @@ export default function Onboarding() {
       }
 
       if (data.verifyUrl) setDevVerifyUrl(data.verifyUrl);
-      setStep('verify-pending');
+      setStep('wallet-connect');
     } catch {
       setError('Could not reach the server.');
     } finally {
@@ -158,6 +195,17 @@ export default function Onboarding() {
       setError('Could not reach the server.');
     }
   };
+
+  const handleWalletSkip = () => setStep('verify-pending');
+
+  const handleWalletConnect = () => {
+    setSelectedWallet('External wallet');
+    setStep('wallet-verify');
+  };
+
+  const handleSignMessage = () => setStep('wallet-verifying');
+
+  const handleWalletWelcomeContinue = () => setStep('verify-pending');
 
   const handleFinish = () => {
     navigate('/login');
@@ -390,6 +438,86 @@ export default function Onboarding() {
         </div>
       )}
 
+      {step === 'wallet-connect' && (
+        <div className="onboarding-inner">
+          <JokoLogo className="onboarding-logo" />
+          <div className="wallet-onboarding-center">
+            <h1 className="onboarding-heading wallet-onboarding-heading">
+              Connect your digital wallet
+            </h1>
+            <button type="button" className="wallet-connect-card" onClick={handleWalletConnect}>
+              <span className="wallet-connect-icon">
+                <IconWalletConnect />
+              </span>
+              <span className="wallet-connect-label">Connect your wallet</span>
+            </button>
+          </div>
+          <button type="button" className="wallet-skip-btn wallet-skip-btn--bottom" onClick={handleWalletSkip}>
+            Skip for now
+          </button>
+        </div>
+      )}
+
+      {step === 'wallet-verify' && (
+        <div className="onboarding-inner">
+          <JokoLogo className="onboarding-logo" />
+          <div className="wallet-onboarding-center">
+            <h1 className="onboarding-heading wallet-onboarding-heading">
+              Verify wallet identity
+            </h1>
+            <p className="wallet-verify-subtext">
+              To proceed, please sign a message with your wallet to prove you are the owner.
+            </p>
+            <div className="wallet-message-box">
+              <p className="wallet-message-text">{signMessage}</p>
+            </div>
+            <button type="button" className="onboarding-btn wallet-sign-btn" onClick={handleSignMessage}>
+              Sign message
+            </button>
+          </div>
+          <button type="button" className="wallet-skip-btn wallet-skip-btn--bottom" onClick={handleWalletSkip}>
+            Skip for now
+          </button>
+        </div>
+      )}
+
+      {step === 'wallet-verifying' && (
+        <div className="onboarding-inner onboarding-inner--splash">
+          <div className="wallet-onboarding-splash">
+            <h1 className="onboarding-heading wallet-onboarding-heading wallet-onboarding-heading--splash">
+              Verifying your wallet…
+            </h1>
+          </div>
+        </div>
+      )}
+
+      {step === 'wallet-transition' && (
+        <div className="onboarding-inner onboarding-inner--splash">
+          <div className="wallet-onboarding-splash">
+            <h1 className="onboarding-heading wallet-onboarding-heading wallet-onboarding-heading--splash">
+              Taking you to your dashboard…
+            </h1>
+          </div>
+        </div>
+      )}
+
+      {step === 'wallet-welcome' && (
+        <div className="onboarding-inner onboarding-inner--splash">
+          <div className="wallet-onboarding-splash">
+            <h1 className="onboarding-heading wallet-onboarding-heading wallet-onboarding-heading--splash">
+              Welcome to Joko
+            </h1>
+            <button
+              type="button"
+              className="onboarding-btn onboarding-btn--fixed"
+              onClick={handleWalletWelcomeContinue}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
       {step === 'verify-pending' && (
         <div className="onboarding-inner">
           <JokoLogo className="onboarding-logo" />
@@ -419,7 +547,9 @@ export default function Onboarding() {
               {resendMsg && <p className="onboarding-resend-msg">{resendMsg}</p>}
               {error && <p className="onboarding-error">{error}</p>}
             </div>
-            {loginLink}
+            <p className="onboarding-footer">
+              Already verified? <Link to="/login">Sign in</Link>
+            </p>
           </div>
         </div>
       )}
