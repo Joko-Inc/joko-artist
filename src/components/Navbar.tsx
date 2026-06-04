@@ -1,5 +1,7 @@
+import { useCallback, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { getUser } from '../auth';
+import { authHeaders, getUser } from '../auth';
+import { ProfileSettingsModal, type ArtistProfile } from './ProfileSettingsModal';
 import './Navbar.css';
 
 function IconDashboard() {
@@ -64,62 +66,100 @@ function initials(name: string) {
 
 export const Navbar = ({ onLogout }: { onLogout: () => void }) => {
   const user = getUser();
-  const displayName = user?.name ?? 'Artist';
+  const fallbackName = user?.name ?? 'Artist';
+  const [profile, setProfile] = useState<ArtistProfile | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const loadProfile = useCallback(() => {
+    fetch('/api/artist/me', { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setProfile(data); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  const displayName = profile?.displayName || profile?.artistName || fallbackName;
+  const profilePicUrl = profile?.profilePicUrl ?? null;
+
+  const handleProfileSaved = (updated: ArtistProfile) => {
+    setProfile(updated);
+  };
 
   return (
-    <nav className="sidebar">
-      <div className="sidebar-profile">
-        <div className="profile-icon">
-          <span className="initials">{initials(displayName)}</span>
-        </div>
-        <div className="profile-info">
-          <span className="artist-name">{displayName.toUpperCase()}</span>
-          <span className="artist-label">Artist</span>
-        </div>
-      </div>
-
-      <div className="divider" />
-
-      <ul className="nav-links">
-        <li>
-          <NavLink to="/dashboard" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            <span className="icon"><IconDashboard /></span>
-            DASHBOARD
-          </NavLink>
-        </li>
-        <li>
-          <NavLink to="/create" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            <span className="icon"><IconCreate /></span>
-            CREATE
-          </NavLink>
-        </li>
-        <li>
-          <NavLink to="/scheduled" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            <span className="icon"><IconScheduled /></span>
-            SCHEDULED
-          </NavLink>
-        </li>
-        <li>
-          <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            <span className="icon"><IconAnalytics /></span>
-            ANALYTICS
-          </NavLink>
-        </li>
-        <li>
-          <NavLink to="/monetization" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            <span className="icon"><IconMonetization /></span>
-            MONETIZATION
-          </NavLink>
-        </li>
-      </ul>
-
-      <div className="sidebar-footer">
-        <img src="/jokologo.png" alt="Joko" className="brand-logo" />
-        <button type="button" className="logout-btn" onClick={onLogout} aria-label="Sign out">
-          <IconLogout />
-          <span>Sign Out</span>
+    <>
+      <nav className="sidebar">
+        <button
+          type="button"
+          className="sidebar-profile sidebar-profile--clickable"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Open profile settings"
+        >
+          <div className="profile-icon">
+            {profilePicUrl ? (
+              <img src={profilePicUrl} alt="" className="profile-icon-img" />
+            ) : (
+              <span className="initials">{initials(displayName)}</span>
+            )}
+          </div>
+          <div className="profile-info">
+            <span className="artist-name">{displayName.toUpperCase()}</span>
+            <span className="artist-label">Artist</span>
+          </div>
         </button>
-      </div>
-    </nav>
+
+        <div className="divider" />
+
+        <ul className="nav-links">
+          <li>
+            <NavLink to="/dashboard" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+              <span className="icon"><IconDashboard /></span>
+              DASHBOARD
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to="/create" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+              <span className="icon"><IconCreate /></span>
+              CREATE
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to="/scheduled" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+              <span className="icon"><IconScheduled /></span>
+              SCHEDULED
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+              <span className="icon"><IconAnalytics /></span>
+              ANALYTICS
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to="/monetization" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+              <span className="icon"><IconMonetization /></span>
+              MONETIZATION
+            </NavLink>
+          </li>
+        </ul>
+
+        <div className="sidebar-footer">
+          <img src="/jokologo.png" alt="Joko" className="brand-logo" />
+          <button type="button" className="logout-btn" onClick={onLogout} aria-label="Sign out">
+            <IconLogout />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </nav>
+
+      <ProfileSettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={handleProfileSaved}
+        initialProfile={profile}
+      />
+    </>
   );
 };

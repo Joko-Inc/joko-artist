@@ -1,0 +1,12 @@
+ALTER TABLE Artist ADD COLUMN email TEXT;
+ALTER TABLE Artist ADD COLUMN location TEXT;
+ALTER TABLE Artist ADD COLUMN phone TEXT;
+ALTER TABLE Artist ADD COLUMN artist_statement TEXT;
+ALTER TABLE Artist ADD COLUMN website TEXT;
+ALTER TABLE Artist ADD COLUMN instagram TEXT;
+ALTER TABLE Artist ADD COLUMN twitter TEXT;
+ALTER TABLE Artist ADD COLUMN music_links TEXT;
+ALTER TABLE Artist ADD COLUMN other_links TEXT;
+ALTER TABLE Artist ADD COLUMN email_verified TEXT;
+ALTER TABLE Artist ADD COLUMN verification_token TEXT;
+ALTER TABLE Artist ADD COLUMN aesthetic_urls TEXT;

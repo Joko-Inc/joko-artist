@@ -102,3 +102,19 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.login-footer {
+  margin: 24px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+}
+
+.login-footer a {
+  color: rgba(157, 80, 255, 0.9);
+  text-decoration: none;
+}
+
+.login-footer a:hover {
+  text-decoration: underline;
+}

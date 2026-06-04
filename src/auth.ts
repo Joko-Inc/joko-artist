@@ -32,3 +32,8 @@ export function getUser(): AuthUser | null {
 export function isLoggedIn(): boolean {
   return getUser() !== null;
 }
+
+export function authHeaders(): HeadersInit {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}

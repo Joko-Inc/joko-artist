@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { StatCard } from "../components/StatCard";
-import { getUser } from "../auth";
+import { authHeaders, getUser } from "../auth";
 import "./Dashboard.css";
 
 function IconUsers() {
@@ -53,6 +53,17 @@ type Post = {
   created_at: string;
 };
 
+type ArtistInsights = {
+  totalFans: number;
+  newFansThisWeek: number;
+  newFansThisMonth: number;
+  newFansPrevMonth: number;
+  topRegion: string | null;
+  topCity: string | null;
+  monthlyRevenue: number;
+  engagement: number;
+};
+
 const KIND_LABEL: Record<Post['file_type'], string> = {
   video: 'Video',
   audio: 'Audio File',
@@ -70,15 +81,50 @@ function formatDate(iso: string) {
   return new Date(iso + 'Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
-function MonthlyInsights() {
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  return String(n);
+}
+
+function formatCurrency(n: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+function formatTrend(current: number, previous: number, suffix: string): string {
+  const delta = current - previous;
+  const sign = delta >= 0 ? '+' : '';
+  return `${sign}${formatCompact(Math.abs(delta))} ${suffix}`;
+}
+
+function MonthlyInsights({ insights, loading }: { insights: ArtistInsights | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <section className="panel-card insights-panel">
+        <h2 className="panel-title">Monthly Insights</h2>
+        <p className="insights-empty">Loading fan insights…</p>
+      </section>
+    );
+  }
+
+  const weekFans = insights?.newFansThisWeek ?? 0;
+  const topCity = insights?.topCity ?? '—';
+  const topRegion = insights?.topRegion ?? '—';
+
   return (
     <section className="panel-card insights-panel">
       <h2 className="panel-title">Monthly Insights</h2>
       <div className="insights-chart-wrap">
         <div className="insights-bubbles" aria-hidden>
-          <div className="insights-bubble insights-bubble--fans">+174</div>
-          <div className="insights-bubble insights-bubble--lagos">Lagos</div>
-          <div className="insights-bubble insights-bubble--nigeria">Nigeria</div>
+          <div className="insights-bubble insights-bubble--fans">
+            {weekFans > 0 ? `+${weekFans}` : '—'}
+          </div>
+          <div className="insights-bubble insights-bubble--lagos">{topCity}</div>
+          <div className="insights-bubble insights-bubble--nigeria">{topRegion}</div>
         </div>
         <div className="insights-legend">
           <span className="insights-legend-item">
@@ -95,6 +141,9 @@ function MonthlyInsights() {
           </span>
         </div>
       </div>
+      {(insights?.totalFans ?? 0) === 0 && (
+        <p className="insights-empty">Fan insights appear when fans subscribe through the Joko fan app.</p>
+      )}
     </section>
   );
 }
@@ -103,16 +152,33 @@ const Dashboard = () => {
   const user = getUser();
   const firstName = user?.name.split(' ')[0] ?? 'Artist';
   const [posts, setPosts] = useState<Post[]>([]);
+  const [insights, setInsights] = useState<ArtistInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/posts?status=submitted')
-      .then((r) => r.json())
+    fetch('/api/posts?status=submitted', { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : []))
       .then(setPosts)
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    fetch('/api/artist/insights', { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setInsights)
+      .catch(() => setInsights(null))
+      .finally(() => setInsightsLoading(false));
+  }, []);
+
   const recentPosts = posts.slice(0, 3);
   const inReviewPosts = posts.filter((p) => p.review_status === 'pending');
+
+  const totalFans = insights?.totalFans ?? 0;
+  const fanTrend = insights
+    ? formatTrend(insights.newFansThisMonth, insights.newFansPrevMonth, 'last month')
+    : '—';
+  const revenue = insights?.monthlyRevenue ?? 0;
+  const engagement = insights?.engagement ?? 0;
 
   return (
     <div className="dashboard-container">
@@ -130,7 +196,7 @@ const Dashboard = () => {
 
       <div className="dashboard-body">
         <div className="dashboard-center">
-          <MonthlyInsights />
+          <MonthlyInsights insights={insights} loading={insightsLoading} />
 
           <section className="panel-card">
             <h2 className="panel-title">Recent Content</h2>
@@ -154,52 +220,76 @@ const Dashboard = () => {
               </article>
             ))}
           </section>
+
+          <section className="panel-card content-review-panel">
+            <h2 className="panel-title">Content In Review</h2>
+            <div className="content-review-list">
+              {inReviewPosts.length === 0 && (
+                <p style={{ opacity: 0.4, fontSize: 14, margin: 0 }}>Nothing pending review.</p>
+              )}
+              {inReviewPosts.map((post) => {
+                const pill = REVIEW_PILL[post.review_status ?? 'pending'];
+                return (
+                  <article key={post.id} className="content-review-item">
+                    <div
+                      className="content-review-thumb"
+                      aria-hidden
+                      style={post.thumbnail_url ? { backgroundImage: `url(${post.thumbnail_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                    />
+                    <div className="content-review-main">
+                      <div className="content-review-title">{post.name}</div>
+                      <div className="content-review-meta">{KIND_LABEL[post.file_type]}</div>
+                    </div>
+                    <span className={`content-review-pill ${pill.cls}`}>{pill.label}</span>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         </div>
 
         <aside className="dashboard-rail">
           <div className="stats-stack">
-            <StatCard label="Total Fans" value="4.8K" trend="+873 last month" tone="blue" icon={<IconUsers />} />
-            <StatCard label="Monthly Revenue" value="$14,345" trend="+1,000 last month" tone="purple" icon={<IconWallet />} />
-            <StatCard label="Engagement" value="84%" trend="+6% last month" tone="green" icon={<IconChart />} />
+            <StatCard
+              label="Total Fans"
+              value={formatCompact(totalFans)}
+              trend={fanTrend}
+              tone="blue"
+              icon={<IconUsers />}
+            />
+            <StatCard
+              label="Monthly Revenue"
+              value={formatCurrency(revenue)}
+              trend={insights ? `${formatCompact(insights.newFansThisMonth)} new fans` : '—'}
+              tone="purple"
+              icon={<IconWallet />}
+            />
+            <StatCard
+              label="Engagement"
+              value={`${Math.round(engagement)}%`}
+              trend={insights && insights.newFansThisWeek > 0
+                ? `+${insights.newFansThisWeek} fans this week`
+                : '—'}
+              tone="green"
+              icon={<IconChart />}
+            />
           </div>
 
           <div className="panel-card notifications-card">
             <h2 className="panel-title">Notifications</h2>
-            <div className="notification-item">
-              <div className="notification-icon"><IconBell /></div>
-              <div className="notification-body">
-                <p>You&apos;ve reached 4,000 fans!</p>
-                <span className="notification-time">4 days ago</span>
+            {totalFans >= 1000 ? (
+              <div className="notification-item">
+                <div className="notification-icon"><IconBell /></div>
+                <div className="notification-body">
+                  <p>You&apos;ve reached {formatCompact(totalFans)} fans!</p>
+                  <span className="notification-time">Recently</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <p style={{ opacity: 0.4, fontSize: 14, margin: 0 }}>No notifications yet.</p>
+            )}
           </div>
         </aside>
-
-        <section className="panel-card content-review-panel">
-          <h2 className="panel-title">Content In Review</h2>
-          <div className="content-review-list">
-            {inReviewPosts.length === 0 && (
-              <p style={{ opacity: 0.4, fontSize: 14, margin: 0 }}>Nothing pending review.</p>
-            )}
-            {inReviewPosts.map((post) => {
-              const pill = REVIEW_PILL[post.review_status ?? 'pending'];
-              return (
-                <article key={post.id} className="content-review-item">
-                  <div
-                    className="content-review-thumb"
-                    aria-hidden
-                    style={post.thumbnail_url ? { backgroundImage: `url(${post.thumbnail_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
-                  />
-                  <div className="content-review-main">
-                    <div className="content-review-title">{post.name}</div>
-                    <div className="content-review-meta">{KIND_LABEL[post.file_type]}</div>
-                  </div>
-                  <span className={`content-review-pill ${pill.cls}`}>{pill.label}</span>
-                </article>
-              );
-            })}
-          </div>
-        </section>
       </div>
     </div>
   );

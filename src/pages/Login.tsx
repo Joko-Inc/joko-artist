@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { setToken } from '../auth';
 import './Login.css';
 
@@ -41,14 +42,14 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
 
         <form className="login-form" onSubmit={handleSubmit}>
           <div className="login-field">
-            <label htmlFor="login-username">Username</label>
+            <label htmlFor="login-username">Username or email</label>
             <input
               id="login-username"
               type="text"
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
+              placeholder="Enter username or email"
               required
             />
           </div>
@@ -72,6 +73,10 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
             {busy ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
+
+        <p className="login-footer">
+          New artist? <Link to="/onboarding">Start onboarding</Link>
+        </p>
       </div>
     </div>
   );

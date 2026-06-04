@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { generateVerificationToken, sendVerificationEmail } from './email.js';
 
 // Use an env var in production: JWT_SECRET=<random-secret> node server/index.js
 const JWT_SECRET = process.env.JWT_SECRET ?? 'joko-dev-secret-change-in-production';
@@ -56,6 +57,24 @@ db.exec(`
     updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (artist_id) REFERENCES Artist(id)
   );
+
+  CREATE TABLE IF NOT EXISTS Fan (
+    id               TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    artist_id        TEXT NOT NULL,
+    external_user_id TEXT,
+    display_name     TEXT,
+    email            TEXT,
+    city             TEXT,
+    region           TEXT,
+    country          TEXT,
+    monthly_amount   REAL NOT NULL DEFAULT 0.0,
+    subscribed_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (artist_id) REFERENCES Artist(id)
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_fan_artist_external
+    ON Fan(artist_id, external_user_id)
+    WHERE external_user_id IS NOT NULL;
 `);
 
 const app = express();
@@ -76,6 +95,91 @@ const upload = multer({ storage });
 // Add wallet columns if they don't exist yet (idempotent migrations)
 for (const col of ['wallet_address', 'circle_wallet_id', 'wallet_chain']) {
   try { db.exec(`ALTER TABLE Artist ADD COLUMN ${col} TEXT`); } catch {}
+}
+
+// Onboarding profile columns (idempotent)
+for (const col of [
+  'email', 'location', 'phone', 'artist_statement', 'website',
+  'instagram', 'twitter', 'music_links', 'other_links', 'email_verified',
+  'verification_token', 'aesthetic_urls', 'slug',
+  'first_name', 'last_name', 'artist_name',
+]) {
+  try { db.exec(`ALTER TABLE Artist ADD COLUMN ${col} TEXT`); } catch {}
+}
+
+// Backfill name fields from legacy full name
+for (const row of db.prepare(`
+  SELECT id, name FROM Artist
+  WHERE (first_name IS NULL OR first_name = '') AND name IS NOT NULL
+`).all()) {
+  const parts = row.name.trim().split(/\s+/);
+  const firstName = parts[0] ?? '';
+  const lastName = parts.slice(1).join(' ');
+  db.prepare(`
+    UPDATE Artist SET
+      first_name = ?,
+      last_name = ?,
+      artist_name = COALESCE(NULLIF(artist_name, ''), name)
+    WHERE id = ?
+  `).run(firstName, lastName, row.id);
+}
+
+function resolveArtist(artistIdOrSlug) {
+  if (!artistIdOrSlug) return null;
+  const key = String(artistIdOrSlug).trim();
+  return db.prepare(`
+    SELECT * FROM Artist
+    WHERE id = ? OR slug = ? OR username = ?
+  `).get(key, key.toLowerCase(), key);
+}
+
+function syncArtistFanStats(artistId) {
+  const stats = db.prepare(`
+    SELECT
+      COUNT(*) AS fan_count,
+      COALESCE(SUM(monthly_amount), 0) AS revenue
+    FROM Fan WHERE artist_id = ?
+  `).get(artistId);
+
+  const active30 = db.prepare(`
+    SELECT COUNT(*) AS c FROM Fan
+    WHERE artist_id = ? AND subscribed_at >= datetime('now', '-30 days')
+  `).get(artistId).c;
+
+  const fanCount = stats.fan_count || 0;
+  const engagement = fanCount > 0
+    ? Math.min(100, Math.round((active30 / fanCount) * 100))
+    : 0;
+
+  db.prepare(`
+    UPDATE Artist SET
+      monthly_revenue = ?,
+      engagement = ?,
+      updated_at = datetime('now')
+    WHERE id = ?
+  `).run(stats.revenue, engagement, artistId);
+}
+
+// Backfill slug from username for existing artists
+for (const row of db.prepare("SELECT id, username FROM Artist WHERE slug IS NULL OR slug = ''").all()) {
+  if (row.username) {
+    db.prepare('UPDATE Artist SET slug = ? WHERE id = ?').run(row.username.toLowerCase(), row.id);
+  }
+}
+
+function aestheticUrlsFromFiles(files) {
+  if (!files?.length) return null;
+  return JSON.stringify(files.map((f) => `/uploads/${f.filename}`));
+}
+
+function parseAestheticUrls(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 const PAYMENTS_URL = process.env.PAYMENTS_URL ?? 'http://localhost:5001';
@@ -102,12 +206,14 @@ if (!existing) {
   console.log('Seeded test artist: testuser');
 }
 
-// POST /api/auth/login
+// POST /api/auth/login — accepts username or email
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
 
-  const artist = db.prepare('SELECT * FROM Artist WHERE username = ?').get(username);
+  const artist = db.prepare(
+    'SELECT * FROM Artist WHERE username = ? OR email = ?',
+  ).get(username, username);
   if (!artist || !artist.password_hash) return res.status(401).json({ error: 'Invalid credentials' });
 
   const valid = bcrypt.compareSync(password, artist.password_hash);
@@ -120,6 +226,371 @@ app.post('/api/auth/login', (req, res) => {
   );
   res.json({ token });
 });
+
+async function sendArtistVerificationEmail(artist) {
+  const token = generateVerificationToken();
+  db.prepare(`
+    UPDATE Artist SET verification_token = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(token, artist.id);
+
+  return sendVerificationEmail({ to: artist.email, name: artist.name, token });
+}
+
+const onboardUpload = upload.fields([
+  { name: 'profilePic', maxCount: 1 },
+  { name: 'aesthetic', maxCount: 10 },
+]);
+
+// POST /api/auth/onboard — create artist account with profile + password
+app.post('/api/auth/onboard', onboardUpload, async (req, res) => {
+  const {
+    firstName, lastName, email, location, phone,
+    artistStatement, website, instagram, twitter, musicLinks, otherLinks,
+    username, password,
+  } = req.body;
+
+  if (!email || !firstName || !username || !password) {
+    return res.status(400).json({ error: 'First name, email, username, and password are required' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+  if (!/^[a-zA-Z0-9_]{3,32}$/.test(username)) {
+    return res.status(400).json({ error: 'Username must be 3–32 characters (letters, numbers, underscores)' });
+  }
+
+  const usernameTaken = db.prepare(
+    'SELECT id FROM Artist WHERE username = ? AND email != ?',
+  ).get(username, email);
+  if (usernameTaken) {
+    return res.status(409).json({ error: 'Username is already taken' });
+  }
+
+  const profilePicUrl = req.files?.profilePic?.[0]
+    ? `/uploads/${req.files.profilePic[0].filename}`
+    : null;
+  const newAestheticUrls = aestheticUrlsFromFiles(req.files?.aesthetic);
+
+  const name = [firstName, lastName].filter(Boolean).join(' ');
+  const passwordHash = bcrypt.hashSync(password, 10);
+  const slug = username.toLowerCase();
+
+  const existing = db.prepare('SELECT * FROM Artist WHERE email = ?').get(email);
+
+  if (existing) {
+    if (existing.password_hash && existing.email_verified === '1') {
+      return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
+    }
+    const aestheticUrls = newAestheticUrls
+      ?? existing.aesthetic_urls
+      ?? null;
+    db.prepare(`
+      UPDATE Artist SET
+        name = ?, first_name = ?, last_name = ?, artist_name = ?,
+        username = ?, slug = ?, password_hash = ?,
+        profile_pic_url = COALESCE(?, profile_pic_url),
+        location = ?, phone = ?, artist_statement = ?,
+        website = ?, instagram = ?, twitter = ?,
+        music_links = ?, other_links = ?,
+        aesthetic_urls = COALESCE(?, aesthetic_urls),
+        email_verified = '0',
+        updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      name, firstName, lastName, name, username, slug, passwordHash, profilePicUrl,
+      location ?? null, phone ?? null, artistStatement ?? null,
+      website ?? null, instagram ?? null, twitter ?? null,
+      musicLinks ?? null, otherLinks ?? null,
+      aestheticUrls,
+      existing.id,
+    );
+    const artist = db.prepare('SELECT * FROM Artist WHERE id = ?').get(existing.id);
+    const emailResult = await sendArtistVerificationEmail(artist);
+    return res.json({
+      success: true,
+      artistId: existing.id,
+      emailSent: emailResult.sent,
+      ...(emailResult.verifyUrl && { verifyUrl: emailResult.verifyUrl }),
+    });
+  }
+
+  const result = db.prepare(`
+    INSERT INTO Artist (
+      name, first_name, last_name, artist_name,
+      username, slug, email, password_hash, profile_pic_url,
+      location, phone, artist_statement,
+      website, instagram, twitter, music_links, other_links,
+      aesthetic_urls, email_verified
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0')
+  `).run(
+    name, firstName, lastName, name, username, slug, email, passwordHash, profilePicUrl,
+    location ?? null, phone ?? null, artistStatement ?? null,
+    website ?? null, instagram ?? null, twitter ?? null,
+    musicLinks ?? null, otherLinks ?? null,
+    newAestheticUrls,
+  );
+
+  const artist = db.prepare('SELECT * FROM Artist WHERE rowid = ?').get(result.lastInsertRowid);
+  const emailResult = await sendArtistVerificationEmail(artist);
+
+  res.status(201).json({
+    success: true,
+    artistId: artist.id,
+    emailSent: emailResult.sent,
+    ...(emailResult.verifyUrl && { verifyUrl: emailResult.verifyUrl }),
+  });
+});
+
+// POST /api/auth/resend-verification
+app.post('/api/auth/resend-verification', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+
+  const artist = db.prepare('SELECT * FROM Artist WHERE email = ?').get(email);
+  if (!artist) return res.status(404).json({ error: 'No account found for this email' });
+  if (artist.email_verified === '1') {
+    return res.status(400).json({ error: 'Email is already verified' });
+  }
+
+  const emailResult = await sendArtistVerificationEmail(artist);
+  res.json({
+    success: true,
+    emailSent: emailResult.sent,
+    ...(emailResult.verifyUrl && { verifyUrl: emailResult.verifyUrl }),
+  });
+});
+
+// GET /api/auth/verify-email — mark email verified via token from verification email
+app.get('/api/auth/verify-email', (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).json({ error: 'Verification token required' });
+
+  const artist = db.prepare('SELECT id FROM Artist WHERE verification_token = ?').get(token);
+  if (!artist) return res.status(400).json({ error: 'Invalid or expired verification link' });
+
+  db.prepare(`
+    UPDATE Artist SET email_verified = '1', verification_token = NULL, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(artist.id);
+
+  res.redirect('/onboarding?verified=1');
+});
+
+function splitFullName(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] ?? '',
+    lastName: parts.slice(1).join(' '),
+  };
+}
+
+function artistProfileResponse(artist) {
+  const fromName = splitFullName(artist.name);
+  const firstName = artist.first_name || fromName.firstName;
+  const lastName = artist.last_name || fromName.lastName;
+  const artistName = artist.artist_name || artist.name || '';
+  const displayName = artistName || artist.name || '';
+  return {
+    id: artist.id,
+    name: artist.name,
+    firstName,
+    lastName,
+    artistName,
+    displayName,
+    username: artist.username,
+    email: artist.email,
+    profilePicUrl: artist.profile_pic_url,
+    location: artist.location,
+    phone: artist.phone,
+    artistStatement: artist.artist_statement,
+    website: artist.website,
+    instagram: artist.instagram,
+    twitter: artist.twitter,
+    musicLinks: artist.music_links,
+    otherLinks: artist.other_links,
+    aestheticUrls: parseAestheticUrls(artist.aesthetic_urls),
+    emailVerified: artist.email_verified === '1',
+    createdAt: artist.created_at,
+    updatedAt: artist.updated_at,
+  };
+}
+
+// GET /api/artist/me — return logged-in artist's saved profile
+app.get('/api/artist/me', requireAuth, (req, res) => {
+  const artist = db.prepare('SELECT * FROM Artist WHERE id = ?').get(req.user.id);
+  if (!artist) return res.status(404).json({ error: 'Artist not found' });
+  res.json(artistProfileResponse(artist));
+});
+
+const profileUpload = upload.single('profilePic');
+
+// PATCH /api/artist/me — update non-critical profile settings
+app.patch('/api/artist/me', requireAuth, profileUpload, (req, res) => {
+  const artist = db.prepare('SELECT * FROM Artist WHERE id = ?').get(req.user.id);
+  if (!artist) return res.status(404).json({ error: 'Artist not found' });
+
+  const {
+    firstName, lastName, artistName, location, phone,
+    artistStatement, website, instagram, twitter, musicLinks, otherLinks,
+  } = req.body;
+
+  const profilePicUrl = req.file
+    ? `/uploads/${req.file.filename}`
+    : artist.profile_pic_url;
+
+  const resolvedFirst = firstName !== undefined ? firstName : (artist.first_name ?? '');
+  const resolvedLast = lastName !== undefined ? lastName : (artist.last_name ?? '');
+  const resolvedArtistName = artistName !== undefined ? artistName : (artist.artist_name ?? artist.name);
+  const fullName = [resolvedFirst, resolvedLast].filter(Boolean).join(' ') || resolvedArtistName;
+
+  db.prepare(`
+    UPDATE Artist SET
+      first_name = ?,
+      last_name = ?,
+      artist_name = ?,
+      name = ?,
+      profile_pic_url = ?,
+      location = ?,
+      phone = ?,
+      artist_statement = ?,
+      website = ?,
+      instagram = ?,
+      twitter = ?,
+      music_links = ?,
+      other_links = ?,
+      updated_at = datetime('now')
+    WHERE id = ?
+  `).run(
+    resolvedFirst || null,
+    resolvedLast || null,
+    resolvedArtistName || null,
+    fullName,
+    profilePicUrl,
+    location !== undefined ? (location || null) : artist.location,
+    phone !== undefined ? (phone || null) : artist.phone,
+    artistStatement !== undefined ? (artistStatement || null) : artist.artist_statement,
+    website !== undefined ? (website || null) : artist.website,
+    instagram !== undefined ? (instagram || null) : artist.instagram,
+    twitter !== undefined ? (twitter || null) : artist.twitter,
+    musicLinks !== undefined ? (musicLinks || null) : artist.music_links,
+    otherLinks !== undefined ? (otherLinks || null) : artist.other_links,
+    req.user.id,
+  );
+
+  const updated = db.prepare('SELECT * FROM Artist WHERE id = ?').get(req.user.id);
+  res.json(artistProfileResponse(updated));
+});
+
+// POST /api/fans/subscribe — record a fan subscription (called from fan app after payment)
+app.post('/api/fans/subscribe', (req, res) => {
+  const {
+    artistId, artistSlug, externalUserId, displayName, email,
+    city, region, country, monthlyAmount,
+  } = req.body;
+
+  const artist = resolveArtist(artistId ?? artistSlug);
+  if (!artist) {
+    return res.status(404).json({ error: 'Artist not found' });
+  }
+
+  const amount = Number(monthlyAmount) || 0;
+
+  if (externalUserId) {
+    const existing = db.prepare(
+      'SELECT id FROM Fan WHERE artist_id = ? AND external_user_id = ?',
+    ).get(artist.id, externalUserId);
+
+    if (existing) {
+      db.prepare(`
+        UPDATE Fan SET
+          display_name = COALESCE(?, display_name),
+          email = COALESCE(?, email),
+          city = COALESCE(?, city),
+          region = COALESCE(?, region),
+          country = COALESCE(?, country),
+          monthly_amount = ?
+        WHERE id = ?
+      `).run(
+        displayName ?? null, email ?? null,
+        city ?? null, region ?? null, country ?? null,
+        amount, existing.id,
+      );
+      syncArtistFanStats(artist.id);
+      return res.json({ success: true, fanId: existing.id, updated: true });
+    }
+  }
+
+  const result = db.prepare(`
+    INSERT INTO Fan (
+      artist_id, external_user_id, display_name, email,
+      city, region, country, monthly_amount
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    artist.id, externalUserId ?? null, displayName ?? null, email ?? null,
+    city ?? null, region ?? null, country ?? null, amount,
+  );
+
+  syncArtistFanStats(artist.id);
+
+  const fan = db.prepare('SELECT * FROM Fan WHERE rowid = ?').get(result.lastInsertRowid);
+  res.status(201).json({ success: true, fanId: fan.id });
+});
+
+// GET /api/artist/insights — fan analytics for logged-in artist
+app.get('/api/artist/insights', requireAuth, (req, res) => {
+  const artistId = req.user.id;
+
+  const totalFans = db.prepare(
+    'SELECT COUNT(*) AS c FROM Fan WHERE artist_id = ?',
+  ).get(artistId).c;
+
+  const newFansThisWeek = db.prepare(`
+    SELECT COUNT(*) AS c FROM Fan
+    WHERE artist_id = ? AND subscribed_at >= datetime('now', '-7 days')
+  `).get(artistId).c;
+
+  const newFansThisMonth = db.prepare(`
+    SELECT COUNT(*) AS c FROM Fan
+    WHERE artist_id = ? AND subscribed_at >= datetime('now', '-30 days')
+  `).get(artistId).c;
+
+  const newFansPrevMonth = db.prepare(`
+    SELECT COUNT(*) AS c FROM Fan
+    WHERE artist_id = ?
+      AND subscribed_at >= datetime('now', '-60 days')
+      AND subscribed_at < datetime('now', '-30 days')
+  `).get(artistId).c;
+
+  const topRegion = db.prepare(`
+    SELECT country AS label, COUNT(*) AS c FROM Fan
+    WHERE artist_id = ? AND country IS NOT NULL AND trim(country) != ''
+    GROUP BY country ORDER BY c DESC LIMIT 1
+  `).get(artistId);
+
+  const topCity = db.prepare(`
+    SELECT city AS label, COUNT(*) AS c FROM Fan
+    WHERE artist_id = ? AND city IS NOT NULL AND trim(city) != ''
+    GROUP BY city ORDER BY c DESC LIMIT 1
+  `).get(artistId);
+
+  const revenueRow = db.prepare(`
+    SELECT COALESCE(SUM(monthly_amount), 0) AS total FROM Fan WHERE artist_id = ?
+  `).get(artistId);
+
+  const artist = db.prepare('SELECT engagement FROM Artist WHERE id = ?').get(artistId);
+
+  res.json({
+    totalFans,
+    newFansThisWeek,
+    newFansThisMonth,
+    newFansPrevMonth,
+    topRegion: topRegion?.label ?? null,
+    topCity: topCity?.label ?? null,
+    monthlyRevenue: revenueRow.total,
+    engagement: artist?.engagement ?? 0,
+  });
+});
+
 // GET /api/wallet — return artist wallet info + proxied Circle balance
 app.get('/api/wallet', requireAuth, async (req, res) => {
   const artist = db.prepare('SELECT wallet_address, circle_wallet_id, wallet_chain FROM Artist WHERE id = ?').get(req.user.id);
@@ -196,9 +667,13 @@ app.post('/api/wallet/withdraw', requireAuth, async (req, res) => {
 
 const uploadFields = upload.fields([{ name: 'file', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]);
 
-// POST /api/posts — create or save-draft a post
-app.post('/api/posts', uploadFields, (req, res) => {
-  const { name, description, category, posted_date, file_type, artist_id, status } = req.body;
+function getOwnedPost(artistId, postId) {
+  return db.prepare('SELECT * FROM Post WHERE id = ? AND artist_id = ?').get(postId, artistId);
+}
+
+// POST /api/posts — create or save-draft a post (scoped to logged-in artist)
+app.post('/api/posts', requireAuth, uploadFields, (req, res) => {
+  const { name, description, category, posted_date, file_type, status } = req.body;
 
   if (!name || !file_type) {
     return res.status(400).json({ error: 'name and file_type are required' });
@@ -214,7 +689,7 @@ app.post('/api/posts', uploadFields, (req, res) => {
 
   const resolvedStatus = status ?? 'draft';
   const result = stmt.run({
-    artist_id: artist_id ?? null,
+    artist_id: req.user.id,
     name,
     description: description ?? null,
     file_type,
@@ -230,28 +705,29 @@ app.post('/api/posts', uploadFields, (req, res) => {
   res.status(201).json(post);
 });
 
-// GET /api/posts?status=draft — list posts, optionally filtered by status
-app.get('/api/posts', (req, res) => {
+// GET /api/posts?status=draft — list posts for logged-in artist only
+app.get('/api/posts', requireAuth, (req, res) => {
   const { status } = req.query;
+  const artistId = req.user.id;
   const posts = status
-    ? db.prepare('SELECT * FROM Post WHERE status = ? ORDER BY updated_at DESC').all(status)
-    : db.prepare('SELECT * FROM Post ORDER BY updated_at DESC').all();
+    ? db.prepare('SELECT * FROM Post WHERE artist_id = ? AND status = ? ORDER BY updated_at DESC').all(artistId, status)
+    : db.prepare('SELECT * FROM Post WHERE artist_id = ? ORDER BY updated_at DESC').all(artistId);
   res.json(posts);
 });
 
-// DELETE /api/posts/:id — delete a post
-app.delete('/api/posts/:id', (req, res) => {
+// DELETE /api/posts/:id — delete a post owned by logged-in artist
+app.delete('/api/posts/:id', requireAuth, (req, res) => {
   const { id } = req.params;
-  const existing = db.prepare('SELECT id FROM Post WHERE id = ?').get(id);
+  const existing = getOwnedPost(req.user.id, id);
   if (!existing) return res.status(404).json({ error: 'Post not found' });
   db.prepare('DELETE FROM Post WHERE id = ?').run(id);
   res.status(204).end();
 });
 
-// PUT /api/posts/:id — update an existing post
-app.put('/api/posts/:id', uploadFields, (req, res) => {
+// PUT /api/posts/:id — update an existing post owned by logged-in artist
+app.put('/api/posts/:id', requireAuth, uploadFields, (req, res) => {
   const { id } = req.params;
-  const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(id);
+  const existing = getOwnedPost(req.user.id, id);
   if (!existing) return res.status(404).json({ error: 'Post not found' });
 
   const { name, description, category, posted_date, file_type, status } = req.body;
@@ -288,10 +764,10 @@ app.put('/api/posts/:id', uploadFields, (req, res) => {
   res.json(db.prepare('SELECT * FROM Post WHERE id = ?').get(id));
 });
 
-// PATCH /api/posts/:id — update review_status and/or visible_to_fans
-app.patch('/api/posts/:id', (req, res) => {
+// PATCH /api/posts/:id — update review_status and/or visible_to_fans (owned by logged-in artist)
+app.patch('/api/posts/:id', requireAuth, (req, res) => {
   const { id } = req.params;
-  const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(id);
+  const existing = getOwnedPost(req.user.id, id);
   if (!existing) return res.status(404).json({ error: 'Post not found' });
 
   const { review_status, visible_to_fans } = req.body;

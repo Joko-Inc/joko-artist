@@ -1,0 +1,348 @@
+.onboarding {
+  position: relative;
+  min-height: 100vh;
+  background: #000;
+  color: #fff;
+  overflow-x: hidden;
+}
+
+.onboarding-glow {
+  pointer-events: none;
+  position: fixed;
+  left: 50%;
+  bottom: -20%;
+  transform: translateX(-50%);
+  width: min(900px, 140vw);
+  height: min(700px, 80vh);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(157, 80, 255, 0.55) 0%,
+    rgba(120, 40, 220, 0.25) 35%,
+    rgba(80, 20, 160, 0.08) 55%,
+    transparent 70%
+  );
+  filter: blur(40px);
+  z-index: 0;
+}
+
+.onboarding-inner {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 24px 120px;
+}
+
+.onboarding-inner--splash {
+  justify-content: center;
+  padding-bottom: 48px;
+}
+
+.onboarding-logo {
+  width: 28px;
+  height: 28px;
+  color: #fff;
+  margin-bottom: 32px;
+  flex-shrink: 0;
+}
+
+.onboarding-logo--large {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 0;
+}
+
+/* ── Splash ── */
+
+.onboarding-splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  animation: onboarding-fade-in 0.8s ease;
+}
+
+@keyframes onboarding-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Intro ── */
+
+.onboarding-intro {
+  max-width: 420px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  justify-content: center;
+  gap: 48px;
+  padding-bottom: 80px;
+}
+
+.onboarding-intro-text {
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.01em;
+}
+
+/* ── Profile form ── */
+
+.onboarding-form-wrap {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.onboarding-heading {
+  margin: 0 0 28px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #fff;
+  line-height: 1.5;
+}
+
+.onboarding-subheading {
+  margin: 36px 0 16px;
+  width: 100%;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.onboarding-avatar {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff6b35 0%, #f72585 50%, #7209b7 100%);
+  margin-bottom: 28px;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.onboarding-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.onboarding-avatar-input {
+  display: none;
+}
+
+.onboarding-fields {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.onboarding-field input,
+.onboarding-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #fff;
+  font-family: var(--font-main);
+  font-size: 13px;
+  padding: 14px 16px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.onboarding-field textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.onboarding-field input::placeholder,
+.onboarding-field textarea::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: capitalize;
+}
+
+.onboarding-field input:focus,
+.onboarding-field textarea:focus {
+  border-color: rgba(157, 80, 255, 0.5);
+}
+
+.onboarding-upload {
+  width: 100%;
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 48px 20px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.onboarding-upload:hover {
+  border-color: rgba(157, 80, 255, 0.4);
+  background: rgba(157, 80, 255, 0.04);
+}
+
+.onboarding-upload svg {
+  display: block;
+  margin: 0 auto 10px;
+  opacity: 0.5;
+}
+
+.onboarding-upload-input {
+  display: none;
+}
+
+/* ── Verify ── */
+
+.onboarding-verify {
+  max-width: 420px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  justify-content: center;
+  gap: 24px;
+  padding-bottom: 100px;
+}
+
+.onboarding-verify-text {
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.65);
+  max-width: 340px;
+}
+
+.onboarding-verify-email {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.onboarding-verify-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 320px;
+  margin-top: 16px;
+}
+
+.onboarding-resend-msg {
+  font-size: 12px;
+  color: rgba(157, 80, 255, 0.9);
+  margin: 0;
+}
+
+/* ── Buttons ── */
+
+.onboarding-btn {
+  appearance: none;
+  background: #9d50ff;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-family: var(--font-main);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 16px 48px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  min-width: 160px;
+}
+
+.onboarding-btn:hover:not(:disabled) {
+  background: #b06aff;
+}
+
+.onboarding-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.onboarding-btn--wide {
+  width: 100%;
+  max-width: 420px;
+  margin-top: 40px;
+}
+
+.onboarding-btn--secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.onboarding-btn--secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.onboarding-btn--fixed {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: calc(100% - 48px);
+  max-width: 420px;
+}
+
+.onboarding-footer {
+  margin: 24px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+}
+
+.onboarding-footer a {
+  color: rgba(157, 80, 255, 0.9);
+  text-decoration: none;
+}
+
+.onboarding-footer a:hover {
+  text-decoration: underline;
+}
+
+.onboarding-footer--splash {
+  position: fixed;
+  bottom: 32px;
+  left: 0;
+  right: 0;
+  z-index: 2;
+}
+
+.onboarding-error {
+  width: 100%;
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: #ff6b6b;
+  text-align: center;
+}
+
+.onboarding-dev-link {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  max-width: 340px;
+  line-height: 1.5;
+}
+
+.onboarding-dev-link a {
+  color: rgba(157, 80, 255, 0.9);
+}

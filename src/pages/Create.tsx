@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { authHeaders } from '../auth';
 import './Create.css';
 
 type CreateTab = 'create' | 'review';
@@ -54,6 +55,77 @@ function IconVideoSmall() {
   );
 }
 
+type MediaPreviewKind = 'image' | 'video' | 'audio' | 'file';
+
+function mediaKindFromSource(mime: string, urlOrName: string): MediaPreviewKind {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  const lower = urlOrName.toLowerCase();
+  if (/\.(jpe?g|png|gif|webp|svg)$/.test(lower)) return 'image';
+  if (/\.(mp4|webm|mov|m4v)$/.test(lower)) return 'video';
+  if (/\.(mp3|wav|ogg|m4a|aac|flac)$/.test(lower)) return 'audio';
+  return 'file';
+}
+
+function UploadPreview({
+  file,
+  existingUrl,
+  variant = 'media',
+  onRemove,
+}: {
+  file: File | null;
+  existingUrl?: string | null;
+  variant?: 'media' | 'thumbnail';
+  onRemove: (e: React.MouseEvent) => void;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const fileName = file?.name ?? existingUrl?.split('/').pop() ?? '';
+  const mime = file?.type ?? '';
+  const kind = mediaKindFromSource(mime, fileName || existingUrl || '');
+
+  useEffect(() => {
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+    setPreviewUrl(existingUrl ?? null);
+  }, [file, existingUrl]);
+
+  if (!fileName && !previewUrl) return null;
+
+  return (
+    <div className={`upload-preview upload-preview--${variant}`}>
+      <div className="upload-preview-thumb">
+        {kind === 'image' && previewUrl ? (
+          <img src={previewUrl} alt="" />
+        ) : kind === 'video' && previewUrl ? (
+          <video src={previewUrl} muted playsInline preload="metadata" />
+        ) : kind === 'audio' ? (
+          <span className="upload-preview-icon" aria-hidden><IconMusic /></span>
+        ) : (
+          <span className="upload-preview-icon" aria-hidden><IconDoc /></span>
+        )}
+      </div>
+      <div className="upload-preview-meta">
+        <div className="upload-preview-name-row">
+          <span className="upload-preview-name">{fileName}</span>
+          <button
+            type="button"
+            className="upload-preview-remove"
+            onClick={onRemove}
+            aria-label={`Remove ${fileName}`}
+          >
+            ×
+          </button>
+        </div>
+        <span className="upload-preview-hint">Click to replace</span>
+      </div>
+    </div>
+  );
+}
 
 type ContentKind = 'social' | 'video' | 'audio' | 'merch';
 
@@ -84,7 +156,7 @@ function timeAgo(isoString: string): string {
 }
 
 function draftProgress(post: Post): number {
-  const filled = [post.name, post.description, post.category, post.posted_date, post.file_url];
+  const filled = [post.name, post.description, post.posted_date, post.file_url];
   return Math.round((filled.filter(Boolean).length / filled.length) * 100);
 }
 
@@ -96,22 +168,21 @@ const KIND_ICONS: Record<ContentKind, React.FC> = {
 };
 
 async function savePost(
-  fields: { kind: ContentKind; title: string; description: string; category: string; date: string; file: File | null; thumbnail: File | null; status: 'submitted' | 'draft' },
+  fields: { kind: ContentKind; title: string; description: string; date: string; file: File | null; thumbnail: File | null; status: 'submitted' | 'draft' },
   editingId: string | null,
 ) {
   const body = new FormData();
   body.append('file_type', fields.kind);
   body.append('name', fields.title);
   body.append('description', fields.description);
-  body.append('category', fields.category);
   body.append('posted_date', fields.date);
   body.append('status', fields.status);
   if (fields.file) body.append('file', fields.file);
   if (fields.thumbnail) body.append('thumbnail', fields.thumbnail);
 
   const res = editingId
-    ? await fetch(`/api/posts/${editingId}`, { method: 'PUT', body })
-    : await fetch('/api/posts', { method: 'POST', body });
+    ? await fetch(`/api/posts/${editingId}`, { method: 'PUT', headers: authHeaders(), body })
+    : await fetch('/api/posts', { method: 'POST', headers: authHeaders(), body });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<Post>;
 }
@@ -120,7 +191,6 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
   const [kind, setKind] = useState<ContentKind>('video');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
   const [date, setDate] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [existingFileUrl, setExistingFileUrl] = useState<string | null>(null);
@@ -135,7 +205,7 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
 
   const fetchDrafts = useCallback(async () => {
     try {
-      const res = await fetch('/api/posts?status=draft');
+      const res = await fetch('/api/posts?status=draft', { headers: authHeaders() });
       if (res.ok) setDrafts(await res.json());
     } catch { /* server not running yet */ }
   }, []);
@@ -147,7 +217,6 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
     setKind(post.file_type);
     setTitle(post.name);
     setDescription(post.description ?? '');
-    setCategory(post.category ?? '');
     setDate(post.posted_date ?? '');
     setFile(null);
     setExistingFileUrl(post.file_url);
@@ -158,7 +227,7 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
   };
 
   const deleteDraft = async (id: string) => {
-    await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+    await fetch(`/api/posts/${id}`, { method: 'DELETE', headers: authHeaders() });
     if (editingId === id) clearForm();
     fetchDrafts();
   };
@@ -166,10 +235,42 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
   const clearForm = () => {
     setEditingId(null);
     setKind('video');
-    setTitle(''); setDescription(''); setCategory(''); setDate('');
+    setTitle(''); setDescription(''); setDate('');
     setFile(null); setExistingFileUrl(null);
     setThumbnail(null); setExistingThumbnailUrl(null);
     setFeedback(null);
+  };
+
+  const clearFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFile(null);
+    setExistingFileUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const clearThumbnail = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setThumbnail(null);
+    setExistingThumbnailUrl(null);
+    if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0];
+    if (picked) {
+      setFile(picked);
+      setExistingFileUrl(null);
+    }
+    e.target.value = '';
+  };
+
+  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0];
+    if (picked) {
+      setThumbnail(picked);
+      setExistingThumbnailUrl(null);
+    }
+    e.target.value = '';
   };
 
   const handleSubmit = async (status: 'submitted' | 'draft') => {
@@ -177,7 +278,7 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
     setBusy(true);
     setFeedback(null);
     try {
-      await savePost({ kind, title, description, category, date, file, thumbnail, status }, editingId);
+      await savePost({ kind, title, description, date, file, thumbnail, status }, editingId);
       clearForm();
       fetchDrafts();
       if (status === 'submitted') { onSubmitSuccess(); return; }
@@ -241,7 +342,7 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
             type="file"
             accept="image/*,audio/*,video/*,.pdf"
             style={{ display: 'none' }}
-            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setExistingFileUrl(null); }}
+            onChange={handleFileChange}
           />
           <div
             className="upload-zone"
@@ -250,17 +351,22 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
             onClick={() => fileInputRef.current?.click()}
             onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
           >
-            <div>
-              <IconUpload />
+            {file || existingFileUrl ? (
+              <UploadPreview
+                file={file}
+                existingUrl={existingFileUrl}
+                variant="media"
+                onRemove={clearFile}
+              />
+            ) : (
               <div>
-                {file
-                  ? file.name
-                  : existingFileUrl
-                    ? <>{existingFileUrl.split('/').pop()}<br /><span style={{ opacity: 0.5, fontSize: 12 }}>Click to replace</span></>
-                    : <>Drag &amp; drop files here or click to browse.<br />Support for images, audio, video, and documents.</>
-                }
+                <IconUpload />
+                <div>
+                  Drag &amp; drop files here or click to browse.<br />
+                  Support for images, audio, video, and documents.
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
         <div className="form-field">
@@ -270,7 +376,7 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
             type="file"
             accept="image/*"
             style={{ display: 'none' }}
-            onChange={(e) => { setThumbnail(e.target.files?.[0] ?? null); setExistingThumbnailUrl(null); }}
+            onChange={handleThumbnailChange}
           />
           <div
             className="upload-zone upload-zone--thumbnail"
@@ -279,26 +385,19 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
             onClick={() => thumbnailInputRef.current?.click()}
             onKeyDown={(e) => e.key === 'Enter' && thumbnailInputRef.current?.click()}
           >
-            {thumbnail ? (
-              <img src={URL.createObjectURL(thumbnail)} alt="Thumbnail preview" className="thumbnail-preview" />
-            ) : existingThumbnailUrl ? (
-              <img src={existingThumbnailUrl} alt="Thumbnail preview" className="thumbnail-preview" />
+            {thumbnail || existingThumbnailUrl ? (
+              <UploadPreview
+                file={thumbnail}
+                existingUrl={existingThumbnailUrl}
+                variant="thumbnail"
+                onRemove={clearThumbnail}
+              />
             ) : (
               <div><IconUpload /><div>Upload thumbnail image</div></div>
             )}
           </div>
         </div>
 
-        <div className="form-field">
-          <label htmlFor="create-cat">Category</label>
-          <select id="create-cat" name="category" value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="" disabled>Select category</option>
-            <option value="music">Music</option>
-            <option value="behind">Behind the scenes</option>
-            <option value="live">Live</option>
-            <option value="merch">Merch</option>
-          </select>
-        </div>
         <div className="form-field">
           <label htmlFor="create-date">Date</label>
           <input id="create-date" name="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -379,7 +478,7 @@ function InReviewView({ showToast, onDismissToast }: { showToast: boolean; onDis
 
   const fetchPosts = useCallback(async () => {
     try {
-      const res = await fetch('/api/posts?status=submitted');
+      const res = await fetch('/api/posts?status=submitted', { headers: authHeaders() });
       if (res.ok) setPosts(await res.json());
     } catch { /* server not running */ }
   }, []);
@@ -387,7 +486,7 @@ function InReviewView({ showToast, onDismissToast }: { showToast: boolean; onDis
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
   const deletePost = async (id: string) => {
-    await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+    await fetch(`/api/posts/${id}`, { method: 'DELETE', headers: authHeaders() });
     fetchPosts();
   };
 

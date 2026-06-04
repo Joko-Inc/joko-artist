@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { authHeaders } from '../auth';
 import './Scheduled.css';
 
 const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -140,7 +141,7 @@ export default function Scheduled() {
 
   const fetchPosts = useCallback(async () => {
     try {
-      const res = await fetch('/api/posts?status=submitted');
+      const res = await fetch('/api/posts?status=submitted', { headers: authHeaders() });
       if (res.ok) setPosts(await res.json());
     } catch {
       /* server not running */

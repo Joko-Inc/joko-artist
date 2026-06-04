@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS Fan (
+    id               TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    artist_id        TEXT NOT NULL,
+    external_user_id TEXT,
+    display_name     TEXT,
+    email            TEXT,
+    city             TEXT,
+    region           TEXT,
+    country          TEXT,
+    monthly_amount   REAL NOT NULL DEFAULT 0.0,
+    subscribed_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (artist_id) REFERENCES Artist(id)
+);
+
+ALTER TABLE Artist ADD COLUMN slug TEXT;
