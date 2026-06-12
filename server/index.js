@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -8,6 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { generateVerificationToken, sendVerificationEmail } from './email.js';
+import { provisionArtistWallet, saveArtistWallet } from './wallet.js';
 
 // Use an env var in production: JWT_SECRET=<random-secret> node server/index.js
 const JWT_SECRET = process.env.JWT_SECRET ?? 'joko-dev-secret-change-in-production';
@@ -238,6 +240,18 @@ async function sendArtistVerificationEmail(artist) {
   return sendVerificationEmail({ to: artist.email, name: artist.name, token });
 }
 
+async function ensureArtistWallet(artist) {
+  if (artist.circle_wallet_id) {
+    return { created: false, reason: 'already_exists', circleWalletId: artist.circle_wallet_id };
+  }
+
+  const result = await provisionArtistWallet();
+  if (result.created) {
+    saveArtistWallet(db, artist.id, result);
+  }
+  return result;
+}
+
 const onboardUpload = upload.fields([
   { name: 'profilePic', maxCount: 1 },
   { name: 'aesthetic', maxCount: 10 },
@@ -301,12 +315,16 @@ app.post('/api/auth/onboard', onboardUpload, async (req, res) => {
   );
 
   const artist = db.prepare('SELECT * FROM Artist WHERE rowid = ?').get(result.lastInsertRowid);
+  const walletResult = await ensureArtistWallet(artist);
   const emailResult = await sendArtistVerificationEmail(artist);
 
   res.status(201).json({
     success: true,
     artistId: artist.id,
     emailSent: emailResult.sent,
+    walletCreated: walletResult.created,
+    ...(walletResult.circleWalletId && { circleWalletId: walletResult.circleWalletId }),
+    ...(walletResult.reason && !walletResult.created && { walletError: walletResult.reason }),
     ...(emailResult.verifyUrl && { verifyUrl: emailResult.verifyUrl }),
   });
 });
@@ -331,17 +349,20 @@ app.post('/api/auth/resend-verification', async (req, res) => {
 });
 
 // GET /api/auth/verify-email — mark email verified via token from verification email
-app.get('/api/auth/verify-email', (req, res) => {
+app.get('/api/auth/verify-email', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.status(400).json({ error: 'Verification token required' });
 
-  const artist = db.prepare('SELECT id FROM Artist WHERE verification_token = ?').get(token);
+  const artist = db.prepare('SELECT * FROM Artist WHERE verification_token = ?').get(token);
   if (!artist) return res.status(400).json({ error: 'Invalid or expired verification link' });
 
   db.prepare(`
     UPDATE Artist SET email_verified = '1', verification_token = NULL, updated_at = datetime('now')
     WHERE id = ?
   `).run(artist.id);
+
+  // Retry wallet creation if signup provisioning failed
+  await ensureArtistWallet(artist);
 
   res.redirect('/onboarding?verified=1');
 });
@@ -658,6 +679,30 @@ app.get('/api/artist/revenue', requireAuth, (req, res) => {
   `).all(artistId);
 
   res.json({ totalRevenue, avgSubAmount, newRevenue, returningRevenue, topCities, topFans, revenueByPrice });
+});
+
+// POST /api/wallet/provision — create Circle wallet for artists who don't have one yet
+app.post('/api/wallet/provision', requireAuth, async (req, res) => {
+  const artist = db.prepare('SELECT id, circle_wallet_id FROM Artist WHERE id = ?').get(req.user.id);
+  if (!artist) return res.status(404).json({ error: 'Artist not found' });
+  if (artist.circle_wallet_id) {
+    return res.json({ success: true, walletCreated: false, circleWalletId: artist.circle_wallet_id });
+  }
+
+  const walletResult = await ensureArtistWallet(artist);
+  if (!walletResult.created) {
+    return res.status(502).json({
+      error: 'Could not create wallet. Check payments service configuration.',
+      reason: walletResult.reason,
+      detail: walletResult.error,
+    });
+  }
+
+  res.json({
+    success: true,
+    walletCreated: true,
+    circleWalletId: walletResult.circleWalletId,
+  });
 });
 
 // GET /api/wallet — return artist wallet info + proxied Circle balance
