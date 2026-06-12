@@ -491,13 +491,25 @@ export default function Analytics() {
   const loadInsights = () => {
     const token = getToken();
     if (!token) return;
+    console.log('[Analytics] Fetching insights…');
     fetch('/api/artist/insights', { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (data) setInsights(data); })
+      .then((data) => {
+        if (data) {
+          console.log('[Analytics] Insights loaded:', data);
+          setInsights(data);
+        }
+      })
       .catch(() => {});
+    console.log('[Analytics] Fetching revenue…');
     fetch('/api/artist/revenue', { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (data) setRevenue(data); })
+      .then((data) => {
+        if (data) {
+          console.log('[Analytics] Revenue loaded:', data);
+          setRevenue(data);
+        }
+      })
       .catch(() => {});
   };
 
@@ -515,13 +527,18 @@ export default function Analytics() {
     setSeeding(true);
     setSeedMsg('');
     try {
+      console.log('[Seed] Fetching POST /api/dev/seed-fans…');
       const r = await fetch('/api/dev/seed-fans', {
         method: 'POST',
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const d = await r.json();
+      console.log('[Seed] Response:', d);
       setSeedMsg(d.message ?? (r.ok ? 'Seeded!' : 'Failed'));
-      if (r.ok) loadInsights();
+      if (r.ok) {
+        console.log('[Seed] Reloading analytics data…');
+        loadInsights();
+      }
     } catch {
       setSeedMsg('Error seeding data');
     } finally {
@@ -533,13 +550,18 @@ export default function Analytics() {
     setSeeding(true);
     setSeedMsg('');
     try {
+      console.log('[Seed] Fetching DELETE /api/dev/seed-fans…');
       const r = await fetch('/api/dev/seed-fans', {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const d = await r.json();
+      console.log('[Seed] Response:', d);
       setSeedMsg(d.message ?? (r.ok ? 'Cleared!' : 'Failed'));
-      if (r.ok) loadInsights();
+      if (r.ok) {
+        console.log('[Seed] Reloading analytics data…');
+        loadInsights();
+      }
     } catch {
       setSeedMsg('Error clearing data');
     } finally {
