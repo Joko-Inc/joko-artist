@@ -8,7 +8,7 @@ import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { generateVerificationToken, sendVerificationEmail } from './email.js';
+import { generateVerificationToken, sendVerificationEmail, sendPasswordResetEmail } from './email.js';
 import { provisionArtistWallet, saveArtistWallet } from './wallet.js';
 
 // Use an env var in production: JWT_SECRET=<random-secret> node server/index.js
@@ -105,9 +105,13 @@ for (const col of [
   'instagram', 'twitter', 'music_links', 'other_links', 'email_verified',
   'verification_token', 'aesthetic_urls', 'slug',
   'first_name', 'last_name', 'artist_name',
+  'password_reset_token', 'password_reset_expires',
 ]) {
   try { db.exec(`ALTER TABLE Artist ADD COLUMN ${col} TEXT`); } catch {}
 }
+
+try { db.exec('ALTER TABLE Post ADD COLUMN merch_price REAL'); } catch {}
+try { db.exec('ALTER TABLE Post ADD COLUMN merch_quantity INTEGER'); } catch {}
 
 // Backfill name fields from legacy full name
 for (const row of db.prepare(`
@@ -229,6 +233,74 @@ app.post('/api/auth/login', (req, res) => {
     { expiresIn: '7d' },
   );
   res.json({ token });
+});
+
+// POST /api/auth/forgot-password — send reset link (verified emails only)
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  const artist = db.prepare(
+    'SELECT * FROM Artist WHERE email IS NOT NULL AND LOWER(email) = LOWER(?)',
+  ).get(email);
+
+  if (!artist) {
+    return res.json({ success: true, message: 'If an account exists for that email, a reset link has been sent.' });
+  }
+
+  if (artist.email_verified !== '1') {
+    return res.status(400).json({
+      error: 'Please verify your email before resetting your password.',
+    });
+  }
+
+  const token = generateVerificationToken();
+  const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  db.prepare(`
+    UPDATE Artist SET password_reset_token = ?, password_reset_expires = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(token, expires, artist.id);
+
+  const emailResult = await sendPasswordResetEmail({ to: artist.email, name: artist.name, token });
+
+  res.json({
+    success: true,
+    message: 'If an account exists for that email, a reset link has been sent.',
+    emailSent: emailResult.sent,
+    ...(emailResult.resetUrl && { resetUrl: emailResult.resetUrl }),
+  });
+});
+
+// POST /api/auth/reset-password — set new password via token from email
+app.post('/api/auth/reset-password', (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Token and new password are required' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  const artist = db.prepare('SELECT * FROM Artist WHERE password_reset_token = ?').get(token);
+  if (!artist) {
+    return res.status(400).json({ error: 'Invalid or expired reset link' });
+  }
+
+  if (artist.password_reset_expires && new Date(artist.password_reset_expires) < new Date()) {
+    return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+  }
+
+  const passwordHash = bcrypt.hashSync(password, 10);
+  db.prepare(`
+    UPDATE Artist SET
+      password_hash = ?,
+      password_reset_token = NULL,
+      password_reset_expires = NULL,
+      updated_at = datetime('now')
+    WHERE id = ?
+  `).run(passwordHash, artist.id);
+
+  res.json({ success: true, message: 'Password updated. You can now sign in.' });
 });
 
 async function sendArtistVerificationEmail(artist) {
@@ -781,27 +853,105 @@ app.post('/api/wallet/withdraw', requireAuth, async (req, res) => {
 
 const uploadFields = upload.fields([{ name: 'file', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]);
 
+function todayDateString() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function isFutureOrTodayDate(dateStr) {
+  if (!dateStr) return true;
+  return dateStr >= todayDateString();
+}
+
+function validatePostFileType(fileType, fileUrl, mimetype, originalname) {
+  if (!fileUrl) return null;
+  const name = (originalname ?? fileUrl).toLowerCase();
+  const mime = (mimetype ?? '').toLowerCase();
+
+  if (fileType === 'video') {
+    const ok = mime.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/.test(name);
+    return ok ? null : 'Video posts require an MP4, WebM, or MOV file.';
+  }
+  if (fileType === 'audio') {
+    const ok = mime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/.test(name);
+    return ok ? null : 'Audio posts require an MP3, WAV, OGG, M4A, AAC, or FLAC file.';
+  }
+  if (fileType === 'merch') {
+    const ok = mime.startsWith('image/') || /\.(jpe?g|png|webp)$/.test(name);
+    return ok ? null : 'Merchandise posts require a JPG, PNG, or WebP product image.';
+  }
+  return null;
+}
+
+function validatePostPayload({ file_type, status, posted_date, file_url, merch_price, merch_quantity, mimetype, originalname }) {
+  const resolvedStatus = status ?? 'draft';
+
+  if (resolvedStatus === 'submitted') {
+    if (posted_date && !isFutureOrTodayDate(posted_date)) {
+      return 'Scheduled date must be today or in the future.';
+    }
+    if (['video', 'audio', 'merch'].includes(file_type) && !file_url) {
+      const labels = { video: 'video file', audio: 'audio file', merch: 'product image' };
+      return `A ${labels[file_type]} is required to submit this post.`;
+    }
+    if (file_type === 'merch') {
+      const price = Number(merch_price);
+      if (!merch_price || isNaN(price) || price <= 0) {
+        return 'A valid merch price is required to submit.';
+      }
+      const qty = Number(merch_quantity);
+      if (!merch_quantity || isNaN(qty) || qty < 1 || !Number.isInteger(qty)) {
+        return 'A valid merch quantity is required to submit (whole number, at least 1).';
+      }
+    }
+  }
+
+  const fileErr = validatePostFileType(file_type, file_url, mimetype, originalname);
+  if (fileErr) return fileErr;
+
+  return null;
+}
+
 function getOwnedPost(artistId, postId) {
   return db.prepare('SELECT * FROM Post WHERE id = ? AND artist_id = ?').get(postId, artistId);
 }
 
 // POST /api/posts — create or save-draft a post (scoped to logged-in artist)
 app.post('/api/posts', requireAuth, uploadFields, (req, res) => {
-  const { name, description, category, posted_date, file_type, status } = req.body;
+  const { name, description, category, posted_date, file_type, status, merch_price, merch_quantity } = req.body;
 
   if (!name || !file_type) {
     return res.status(400).json({ error: 'name and file_type are required' });
   }
 
-  const file_url = req.files?.['file']?.[0] ? `/uploads/${req.files['file'][0].filename}` : null;
+  const file = req.files?.['file']?.[0] ?? null;
+  const file_url = file ? `/uploads/${file.filename}` : null;
   const thumbnail_url = req.files?.['thumbnail']?.[0] ? `/uploads/${req.files['thumbnail'][0].filename}` : null;
 
+  const resolvedStatus = status ?? 'draft';
+  const parsedMerchPrice = merch_price != null && merch_price !== '' ? Number(merch_price) : null;
+  const parsedMerchQuantity = merch_quantity != null && merch_quantity !== '' ? Number(merch_quantity) : null;
+
+  const validationError = validatePostPayload({
+    file_type,
+    status: resolvedStatus,
+    posted_date,
+    file_url,
+    merch_price: parsedMerchPrice,
+    merch_quantity: parsedMerchQuantity,
+    mimetype: file?.mimetype,
+    originalname: file?.originalname,
+  });
+  if (validationError) return res.status(400).json({ error: validationError });
+
   const stmt = db.prepare(`
-    INSERT INTO Post (artist_id, name, description, file_type, file_url, thumbnail_url, category, posted_date, status, review_status)
-    VALUES (@artist_id, @name, @description, @file_type, @file_url, @thumbnail_url, @category, @posted_date, @status, @review_status)
+    INSERT INTO Post (artist_id, name, description, file_type, file_url, thumbnail_url, category, posted_date, status, review_status, merch_price, merch_quantity)
+    VALUES (@artist_id, @name, @description, @file_type, @file_url, @thumbnail_url, @category, @posted_date, @status, @review_status, @merch_price, @merch_quantity)
   `);
 
-  const resolvedStatus = status ?? 'draft';
   const result = stmt.run({
     artist_id: req.user.id,
     name,
@@ -813,6 +963,8 @@ app.post('/api/posts', requireAuth, uploadFields, (req, res) => {
     posted_date: posted_date ?? null,
     status: resolvedStatus,
     review_status: resolvedStatus === 'submitted' ? 'pending' : null,
+    merch_price: file_type === 'merch' ? parsedMerchPrice : null,
+    merch_quantity: file_type === 'merch' ? parsedMerchQuantity : null,
   });
 
   const post = db.prepare('SELECT * FROM Post WHERE rowid = ?').get(result.lastInsertRowid);
@@ -844,11 +996,32 @@ app.put('/api/posts/:id', requireAuth, uploadFields, (req, res) => {
   const existing = getOwnedPost(req.user.id, id);
   if (!existing) return res.status(404).json({ error: 'Post not found' });
 
-  const { name, description, category, posted_date, file_type, status } = req.body;
-  const file_url = req.files?.['file']?.[0] ? `/uploads/${req.files['file'][0].filename}` : existing.file_url;
+  const { name, description, category, posted_date, file_type, status, merch_price, merch_quantity } = req.body;
+  const file = req.files?.['file']?.[0] ?? null;
+  const file_url = file ? `/uploads/${file.filename}` : existing.file_url;
   const thumbnail_url = req.files?.['thumbnail']?.[0] ? `/uploads/${req.files['thumbnail'][0].filename}` : existing.thumbnail_url;
 
   const resolvedStatus = status ?? existing.status;
+  const resolvedFileType = file_type ?? existing.file_type;
+  const parsedMerchPrice = merch_price != null && merch_price !== ''
+    ? Number(merch_price)
+    : existing.merch_price;
+  const parsedMerchQuantity = merch_quantity != null && merch_quantity !== ''
+    ? Number(merch_quantity)
+    : existing.merch_quantity;
+
+  const validationError = validatePostPayload({
+    file_type: resolvedFileType,
+    status: resolvedStatus,
+    posted_date: posted_date ?? existing.posted_date,
+    file_url,
+    merch_price: parsedMerchPrice,
+    merch_quantity: parsedMerchQuantity,
+    mimetype: file?.mimetype,
+    originalname: file?.originalname ?? file_url,
+  });
+  if (validationError) return res.status(400).json({ error: validationError });
+
   db.prepare(`
     UPDATE Post SET
       name = @name,
@@ -860,19 +1033,23 @@ app.put('/api/posts/:id', requireAuth, uploadFields, (req, res) => {
       posted_date = @posted_date,
       status = @status,
       review_status = @review_status,
+      merch_price = @merch_price,
+      merch_quantity = @merch_quantity,
       updated_at = datetime('now')
     WHERE id = @id
   `).run({
     id,
     name: name ?? existing.name,
     description: description ?? existing.description,
-    file_type: file_type ?? existing.file_type,
+    file_type: resolvedFileType,
     file_url,
     thumbnail_url,
     category: category ?? existing.category,
     posted_date: posted_date ?? existing.posted_date,
     status: resolvedStatus,
     review_status: resolvedStatus === 'submitted' ? (existing.review_status ?? 'pending') : existing.review_status,
+    merch_price: resolvedFileType === 'merch' ? parsedMerchPrice : null,
+    merch_quantity: resolvedFileType === 'merch' ? parsedMerchQuantity : null,
   });
 
   res.json(db.prepare('SELECT * FROM Post WHERE id = ?').get(id));

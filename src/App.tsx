@@ -9,6 +9,7 @@ import Scheduled from './pages/Scheduled';
 import Analytics from './pages/Analytics';
 import Monetization from './pages/Monetization';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Onboarding from './pages/Onboarding';
 import { isLoggedIn, removeToken } from './auth';
 
@@ -36,6 +37,7 @@ function PublicApp({ onLogin }: { onLogin: () => void }) {
     <Routes>
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/login" element={<Login onLogin={onLogin} />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="*" element={<Navigate to="/onboarding" replace />} />
     </Routes>
   );

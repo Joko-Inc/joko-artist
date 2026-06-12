@@ -173,10 +173,6 @@ export default function Onboarding() {
     }
   };
 
-  const handleOpenEmail = () => {
-    window.open(`mailto:${profile.email}`, '_self');
-  };
-
   const handleResend = async () => {
     setResendMsg(null);
     setError(null);
@@ -547,8 +543,12 @@ export default function Onboarding() {
               </p>
             )}
             <div className="onboarding-verify-actions">
-              <button type="button" className="onboarding-btn" onClick={handleOpenEmail}>
-                Open my email
+              <button
+                type="button"
+                className="onboarding-btn"
+                onClick={() => navigate('/login')}
+              >
+                Sign in
               </button>
               <button
                 type="button"
@@ -560,9 +560,6 @@ export default function Onboarding() {
               {resendMsg && <p className="onboarding-resend-msg">{resendMsg}</p>}
               {error && <p className="onboarding-error">{error}</p>}
             </div>
-            <p className="onboarding-footer">
-              Already verified? <Link to="/login">Sign in</Link>
-            </p>
           </div>
         </div>
       )}

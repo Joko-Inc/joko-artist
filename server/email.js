@@ -51,3 +51,33 @@ export async function sendVerificationEmail({ to, name, token }) {
 
   return { sent: true };
 }
+
+export function buildPasswordResetUrl(token) {
+  return `${APP_URL}/reset-password?token=${token}`;
+}
+
+export async function sendPasswordResetEmail({ to, name, token }) {
+  const resetUrl = buildPasswordResetUrl(token);
+  const transporter = getTransporter();
+
+  if (!transporter) {
+    console.log('\n[email] SMTP not configured — password reset link for', to);
+    console.log(resetUrl, '\n');
+    return { sent: false, resetUrl };
+  }
+
+  await transporter.sendMail({
+    from: SMTP_FROM,
+    to,
+    subject: 'Reset your Joko artist password',
+    html: `
+      <p>Hi ${name},</p>
+      <p>We received a request to reset your password. Click the link below to choose a new one:</p>
+      <p><a href="${resetUrl}">${resetUrl}</a></p>
+      <p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
+      <p>— The Joko Team</p>
+    `,
+  });
+
+  return { sent: true };
+}

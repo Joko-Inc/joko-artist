@@ -138,12 +138,66 @@ type Post = {
   thumbnail_url: string | null;
   category: string | null;
   posted_date: string | null;
+  merch_price: number | null;
+  merch_quantity: number | null;
   status: 'draft' | 'submitted';
   review_status: 'pending' | 'accepted' | 'declined' | null;
   visible_to_fans: 0 | 1;
   updated_at: string;
   created_at: string;
 };
+
+const KIND_UPLOAD_CONFIG: Record<ContentKind, {
+  label: string;
+  accept: string;
+  hint: string;
+  submitLabel: string;
+}> = {
+  social: {
+    label: 'Upload Media',
+    accept: 'image/*,.pdf',
+    hint: 'Upload an image (JPG, PNG, GIF, WebP) or PDF for your social post.',
+    submitLabel: 'media file',
+  },
+  video: {
+    label: 'Upload Video',
+    accept: 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v',
+    hint: 'Upload a video file. Required formats: MP4, WebM, or MOV.',
+    submitLabel: 'video file (MP4, WebM, or MOV)',
+  },
+  audio: {
+    label: 'Upload Audio',
+    accept: 'audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a,.mp3,.wav,.ogg,.m4a,.aac,.flac',
+    hint: 'Upload an audio file. Required formats: MP3, WAV, OGG, M4A, AAC, or FLAC.',
+    submitLabel: 'audio file (MP3, WAV, OGG, M4A, AAC, or FLAC)',
+  },
+  merch: {
+    label: 'Upload Product Image',
+    accept: 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp',
+    hint: 'Upload a product photo. Required formats: JPG, PNG, or WebP.',
+    submitLabel: 'product image (JPG, PNG, or WebP)',
+  },
+};
+
+function todayDateString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function fileMatchesKind(kind: ContentKind, file: File): boolean {
+  const name = file.name.toLowerCase();
+  const mime = file.type.toLowerCase();
+  if (kind === 'video') {
+    return mime.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/.test(name);
+  }
+  if (kind === 'audio') {
+    return mime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/.test(name);
+  }
+  if (kind === 'merch') {
+    return mime.startsWith('image/') || /\.(jpe?g|png|webp)$/.test(name);
+  }
+  return mime.startsWith('image/') || mime === 'application/pdf' || /\.(jpe?g|png|gif|webp|pdf)$/.test(name);
+}
 
 function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString + 'Z').getTime();
@@ -168,7 +222,17 @@ const KIND_ICONS: Record<ContentKind, React.FC> = {
 };
 
 async function savePost(
-  fields: { kind: ContentKind; title: string; description: string; date: string; file: File | null; thumbnail: File | null; status: 'submitted' | 'draft' },
+  fields: {
+    kind: ContentKind;
+    title: string;
+    description: string;
+    date: string;
+    file: File | null;
+    thumbnail: File | null;
+    merchPrice: string;
+    merchQuantity: string;
+    status: 'submitted' | 'draft';
+  },
   editingId: string | null,
 ) {
   const body = new FormData();
@@ -177,13 +241,22 @@ async function savePost(
   body.append('description', fields.description);
   body.append('posted_date', fields.date);
   body.append('status', fields.status);
+  if (fields.kind === 'merch' && fields.merchPrice) {
+    body.append('merch_price', fields.merchPrice);
+  }
+  if (fields.kind === 'merch' && fields.merchQuantity) {
+    body.append('merch_quantity', fields.merchQuantity);
+  }
   if (fields.file) body.append('file', fields.file);
   if (fields.thumbnail) body.append('thumbnail', fields.thumbnail);
 
   const res = editingId
     ? await fetch(`/api/posts/${editingId}`, { method: 'PUT', headers: authHeaders(), body })
     : await fetch('/api/posts', { method: 'POST', headers: authHeaders(), body });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(JSON.stringify(data));
+  }
   return res.json() as Promise<Post>;
 }
 
@@ -192,6 +265,8 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
+  const [merchPrice, setMerchPrice] = useState('');
+  const [merchQuantity, setMerchQuantity] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [existingFileUrl, setExistingFileUrl] = useState<string | null>(null);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
@@ -212,12 +287,30 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
 
   useEffect(() => { fetchDrafts(); }, [fetchDrafts]);
 
+  const uploadConfig = KIND_UPLOAD_CONFIG[kind];
+  const minDate = todayDateString();
+
+  const handleKindChange = (nextKind: ContentKind) => {
+    if (nextKind === kind) return;
+    setFile(null);
+    setExistingFileUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (nextKind !== 'merch') {
+      setMerchPrice('');
+      setMerchQuantity('');
+    }
+    setKind(nextKind);
+    setFeedback(null);
+  };
+
   const loadDraft = (post: Post) => {
     setEditingId(post.id);
     setKind(post.file_type);
     setTitle(post.name);
     setDescription(post.description ?? '');
     setDate(post.posted_date ?? '');
+    setMerchPrice(post.merch_price != null ? String(post.merch_price) : '');
+    setMerchQuantity(post.merch_quantity != null ? String(post.merch_quantity) : '');
     setFile(null);
     setExistingFileUrl(post.file_url);
     setThumbnail(null);
@@ -235,7 +328,7 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
   const clearForm = () => {
     setEditingId(null);
     setKind('video');
-    setTitle(''); setDescription(''); setDate('');
+    setTitle(''); setDescription(''); setDate(''); setMerchPrice(''); setMerchQuantity('');
     setFile(null); setExistingFileUrl(null);
     setThumbnail(null); setExistingThumbnailUrl(null);
     setFeedback(null);
@@ -258,8 +351,14 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0];
     if (picked) {
+      if (!fileMatchesKind(kind, picked)) {
+        setFeedback(`Please upload a valid ${KIND_UPLOAD_CONFIG[kind].submitLabel}.`);
+        e.target.value = '';
+        return;
+      }
       setFile(picked);
       setExistingFileUrl(null);
+      setFeedback(null);
     }
     e.target.value = '';
   };
@@ -275,16 +374,46 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
 
   const handleSubmit = async (status: 'submitted' | 'draft') => {
     if (!title.trim()) { setFeedback('Please enter a title.'); return; }
+
+    if (status === 'submitted') {
+      if (date && date < minDate) {
+        setFeedback('Scheduled date must be today or in the future.');
+        return;
+      }
+      if (['video', 'audio', 'merch'].includes(kind) && !file && !existingFileUrl) {
+        setFeedback(`Please upload a ${KIND_UPLOAD_CONFIG[kind].submitLabel}.`);
+        return;
+      }
+      if (kind === 'merch') {
+        const price = Number(merchPrice);
+        if (!merchPrice || isNaN(price) || price <= 0) {
+          setFeedback('Please enter a valid merch price.');
+          return;
+        }
+        const qty = Number(merchQuantity);
+        if (!merchQuantity || isNaN(qty) || qty < 1 || !Number.isInteger(qty)) {
+          setFeedback('Please enter a valid quantity (whole number, at least 1).');
+          return;
+        }
+      }
+    }
+
     setBusy(true);
     setFeedback(null);
     try {
-      await savePost({ kind, title, description, date, file, thumbnail, status }, editingId);
+      await savePost({ kind, title, description, date, file, thumbnail, merchPrice, merchQuantity, status }, editingId);
       clearForm();
       fetchDrafts();
       if (status === 'submitted') { onSubmitSuccess(); return; }
       setFeedback('Draft saved.');
-    } catch {
-      setFeedback('Something went wrong. Is the server running?');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      try {
+        const parsed = JSON.parse(msg);
+        setFeedback(parsed.error ?? 'Something went wrong.');
+      } catch {
+        setFeedback('Something went wrong. Is the server running?');
+      }
     } finally {
       setBusy(false);
     }
@@ -306,7 +435,7 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
               key={id}
               type="button"
               className={`type-card type-card--${id} ${kind === id ? 'type-card--active' : ''}`}
-              onClick={() => setKind(id)}
+              onClick={() => handleKindChange(id)}
             >
               <div className="type-card-icon"><Icon /></div>
               <div className="type-card-label">{label}</div>
@@ -336,11 +465,11 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
           />
         </div>
         <div className="form-field">
-          <label>Upload Media</label>
+          <label>{uploadConfig.label}</label>
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,audio/*,video/*,.pdf"
+            accept={uploadConfig.accept}
             style={{ display: 'none' }}
             onChange={handleFileChange}
           />
@@ -362,13 +491,43 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
               <div>
                 <IconUpload />
                 <div>
-                  Drag &amp; drop files here or click to browse.<br />
-                  Support for images, audio, video, and documents.
+                  Drag &amp; drop your file here or click to browse.<br />
+                  {uploadConfig.hint}
                 </div>
               </div>
             )}
           </div>
         </div>
+        {kind === 'merch' && (
+          <>
+            <div className="form-field">
+              <label htmlFor="create-price">Price (USD)</label>
+              <input
+                id="create-price"
+                name="merchPrice"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="Enter price, e.g. 25.00"
+                value={merchPrice}
+                onChange={(e) => setMerchPrice(e.target.value)}
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="create-quantity">Quantity</label>
+              <input
+                id="create-quantity"
+                name="merchQuantity"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="How many units available?"
+                value={merchQuantity}
+                onChange={(e) => setMerchQuantity(e.target.value)}
+              />
+            </div>
+          </>
+        )}
         <div className="form-field">
           <label>Thumbnail</label>
           <input
@@ -399,8 +558,15 @@ function CreateFormView({ onSubmitSuccess }: { onSubmitSuccess: () => void }) {
         </div>
 
         <div className="form-field">
-          <label htmlFor="create-date">Date</label>
-          <input id="create-date" name="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <label htmlFor="create-date">Schedule Date</label>
+          <input
+            id="create-date"
+            name="date"
+            type="date"
+            min={minDate}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
         </div>
         <div className="form-actions">
           <button type="button" className="btn-submit" disabled={busy} onClick={() => handleSubmit('submitted')}>
