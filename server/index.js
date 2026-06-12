@@ -401,6 +401,45 @@ app.post('/api/auth/onboard', onboardUpload, async (req, res) => {
   });
 });
 
+// POST /api/auth/provision-wallet — create Circle wallet during onboarding (no login yet)
+app.post('/api/auth/provision-wallet', async (req, res) => {
+  const { artistId, email } = req.body;
+  if (!artistId || !email) {
+    return res.status(400).json({ error: 'artistId and email are required' });
+  }
+
+  const artist = db.prepare(`
+    SELECT * FROM Artist WHERE id = ? AND email IS NOT NULL AND LOWER(email) = LOWER(?)
+  `).get(artistId, email);
+
+  if (!artist) {
+    return res.status(404).json({ error: 'Artist not found' });
+  }
+
+  if (artist.circle_wallet_id) {
+    return res.json({
+      success: true,
+      walletCreated: false,
+      circleWalletId: artist.circle_wallet_id,
+    });
+  }
+
+  const walletResult = await ensureArtistWallet(artist);
+  if (!walletResult.created) {
+    return res.status(502).json({
+      error: 'Could not create wallet. Check payments service configuration.',
+      reason: walletResult.reason,
+      detail: walletResult.error,
+    });
+  }
+
+  res.json({
+    success: true,
+    walletCreated: true,
+    circleWalletId: walletResult.circleWalletId,
+  });
+});
+
 // POST /api/auth/resend-verification
 app.post('/api/auth/resend-verification', async (req, res) => {
   const { email } = req.body;

@@ -82,6 +82,10 @@ export default function Onboarding() {
   const [devVerifyUrl, setDevVerifyUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [signMessage, setSignMessage] = useState('');
+  const [artistId, setArtistId] = useState<string | null>(null);
+  const [circleWalletId, setCircleWalletId] = useState<string | null>(null);
+  const [walletFlow, setWalletFlow] = useState<'create' | 'connect' | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
 
   const aestheticInputRef = useRef<HTMLInputElement>(null);
 
@@ -165,6 +169,8 @@ export default function Onboarding() {
       }
 
       if (data.verifyUrl) setDevVerifyUrl(data.verifyUrl);
+      setArtistId(data.artistId ?? null);
+      if (data.circleWalletId) setCircleWalletId(data.circleWalletId);
       setStep('wallet-connect');
     } catch {
       setError('Could not reach the server.');
@@ -197,7 +203,48 @@ export default function Onboarding() {
 
   const handleWalletSkip = () => setStep('verify-pending');
 
+  const advanceWalletSuccessFlow = () => {
+    setStep('wallet-verifying');
+  };
+
+  const handleCreateWallet = async () => {
+    setWalletError(null);
+    setWalletFlow('create');
+
+    if (circleWalletId) {
+      advanceWalletSuccessFlow();
+      return;
+    }
+
+    if (!artistId || !profile.email) {
+      setWalletError('Account info missing. Please go back and complete signup.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const res = await fetch('/api/auth/provision-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId, email: profile.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setWalletError(data.error ?? 'Could not create wallet.');
+        return;
+      }
+      if (data.circleWalletId) setCircleWalletId(data.circleWalletId);
+      advanceWalletSuccessFlow();
+    } catch {
+      setWalletError('Could not reach the server.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleWalletConnect = () => {
+    setWalletError(null);
+    setWalletFlow('connect');
     setStep('wallet-verify');
   };
 
@@ -442,15 +489,38 @@ export default function Onboarding() {
         <div className="onboarding-inner">
           <JokoLogo className="onboarding-logo" />
           <div className="wallet-onboarding-center">
-            <h1 className="onboarding-heading wallet-onboarding-heading">
-              Connect your digital wallet
-            </h1>
-            <button type="button" className="wallet-connect-card" onClick={handleWalletConnect}>
-              <span className="wallet-connect-icon">
-                <IconWalletConnect />
-              </span>
-              <span className="wallet-connect-label">Connect your wallet</span>
-            </button>
+            <section className="wallet-connect-section">
+              <h2 className="wallet-connect-section-heading">Create your new digital wallet</h2>
+              <button
+                type="button"
+                className="wallet-connect-card wallet-connect-card--primary"
+                onClick={handleCreateWallet}
+                disabled={busy}
+              >
+                <span className="wallet-connect-icon">
+                  <IconWalletConnect />
+                </span>
+                <span className="wallet-connect-label">
+                  {busy ? 'Creating…' : 'Create your Wallet'}
+                </span>
+              </button>
+            </section>
+
+            <div className="wallet-connect-divider" aria-hidden />
+
+            <section className="wallet-connect-section">
+              <h2 className="wallet-connect-section-heading">
+                Already have a digital wallet? Connect your digital wallet
+              </h2>
+              <button type="button" className="wallet-connect-card" onClick={handleWalletConnect}>
+                <span className="wallet-connect-icon">
+                  <IconWalletConnect />
+                </span>
+                <span className="wallet-connect-label">Connect your wallet</span>
+              </button>
+            </section>
+
+            {walletError && <p className="onboarding-error wallet-connect-error">{walletError}</p>}
           </div>
           <button type="button" className="wallet-skip-btn wallet-skip-btn--bottom" onClick={handleWalletSkip}>
             Skip for now
@@ -494,7 +564,7 @@ export default function Onboarding() {
           <JokoLogo className="onboarding-logo" />
           <div className="wallet-verifying-stage">
             <h1 className="onboarding-heading wallet-onboarding-heading wallet-onboarding-heading--splash">
-              Verifying your wallet…
+              {walletFlow === 'create' ? 'Creating your wallet…' : 'Verifying your wallet…'}
             </h1>
           </div>
         </div>

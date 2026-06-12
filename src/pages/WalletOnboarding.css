@@ -35,11 +35,57 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   flex: 1;
   justify-content: center;
-  gap: 24px;
+  gap: 28px;
   padding-bottom: 80px;
+}
+
+.wallet-connect-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.wallet-connect-section-heading {
+  margin: 0;
+  font-family: var(--font-main);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.82);
+  text-align: center;
+  max-width: 340px;
+}
+
+.wallet-connect-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.wallet-connect-error {
+  text-align: center;
+  margin: 0;
+}
+
+.wallet-connect-card--primary {
+  border-color: rgba(157, 80, 255, 0.35);
+  background: rgba(157, 80, 255, 0.08);
+}
+
+.wallet-connect-card--primary:hover:not(:disabled) {
+  border-color: rgba(157, 80, 255, 0.6);
+  background: rgba(157, 80, 255, 0.14);
+}
+
+.wallet-connect-card:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .wallet-verify-stage {
