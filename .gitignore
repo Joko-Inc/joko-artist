@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
 
 # Database and uploads (use Render persistent disk)
 database/database.sqlite
