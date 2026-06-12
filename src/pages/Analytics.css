@@ -94,6 +94,28 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
+.analytics-seed-btn {
+  border-color: rgba(167, 139, 250, 0.5);
+  color: rgba(167, 139, 250, 0.9);
+}
+
+.analytics-seed-btn:disabled,
+.analytics-clear-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.analytics-clear-btn {
+  border-color: rgba(248, 113, 113, 0.4);
+  color: rgba(248, 113, 113, 0.8);
+}
+
+.analytics-seed-msg {
+  font-size: 11px;
+  color: rgba(167, 139, 250, 0.8);
+  white-space: nowrap;
+}
+
 .analytics-toolbar-select {
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.35);
@@ -161,11 +183,47 @@
   margin-bottom: 0;
 }
 
+.analytics-content-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
 .analytics-content-title {
   font-size: 15px;
   font-weight: 600;
   color: #fff;
-  min-width: 140px;
+}
+
+.analytics-content-type {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.analytics-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid;
+}
+
+.analytics-badge--live    { color: #4ade80; border-color: rgba(74, 222, 128, 0.4); background: rgba(74, 222, 128, 0.08); }
+.analytics-badge--review  { color: #facc15; border-color: rgba(250, 204, 21, 0.4);  background: rgba(250, 204, 21, 0.08); }
+.analytics-badge--declined{ color: #f87171; border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.08); }
+.analytics-badge--draft   { color: rgba(255,255,255,0.4); border-color: rgba(255,255,255,0.15); background: transparent; }
+
+.analytics-empty {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.35);
+  padding: 24px 0;
+  text-align: center;
 }
 
 .analytics-content-metrics {

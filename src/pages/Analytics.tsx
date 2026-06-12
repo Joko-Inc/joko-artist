@@ -1,6 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StatCard } from '../components/StatCard';
+import { getToken } from '../auth';
 import './Analytics.css';
+
+interface RevenueData {
+  totalRevenue: number;
+  avgSubAmount: number;
+  newRevenue: number;
+  returningRevenue: number;
+  topCities: { label: string; country: string | null; fan_count: number; revenue: number }[];
+  topFans: { display_name: string | null; country: string | null; monthly_amount: number }[];
+  revenueByPrice: { price: number; revenue: number }[];
+}
+
+interface InsightsData {
+  totalFans: number;
+  newFansThisMonth: number;
+  newFansPrevMonth: number;
+  monthlyRevenue: number;
+  engagement: number;
+  totalViews: number;
+  avgSubAmount: number;
+  topRegion: string | null;
+  topCity: string | null;
+  fanGrowthByMonth: { month: string; count: number }[];
+}
 
 type AnalyticsTab = 'overview' | 'revenue';
 
@@ -98,59 +122,94 @@ function TrendIcon({ dir }: { dir: 'up' | 'down' | 'flat' }) {
   );
 }
 
-function FanGrowthPlaceholder() {
+function FanGrowthChart({ months }: { months: { month: string; count: number }[] }) {
+  if (months.length === 0) {
+    return <p className="analytics-empty">No fan data yet. Seed test data to see a chart.</p>;
+  }
+
+  const w = 400;
+  const h = 140;
+  const padL = 36;
+  const padB = 28;
+  const chartW = w - padL - 8;
+  const chartH = h - padB - 8;
+  const baseY = 8 + chartH;
+
+  // Compute cumulative totals
+  const cumulative = months.reduce<{ month: string; total: number }[]>((acc, m) => {
+    const prev = acc.length > 0 ? acc[acc.length - 1].total : 0;
+    acc.push({ month: m.month, total: prev + m.count });
+    return acc;
+  }, []);
+
+  const maxV = cumulative[cumulative.length - 1].total || 1;
+  const toY = (v: number) => baseY - (v / maxV) * chartH;
+  const xs = cumulative.map((_, i) => padL + (i / Math.max(cumulative.length - 1, 1)) * chartW);
+  const pts = cumulative.map((c, i) => [xs[i], toY(c.total)] as const);
+  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]},${p[1]}`).join(' ');
+  const area = `${line} L ${pts[pts.length - 1][0]},${baseY} L ${pts[0][0]},${baseY} Z`;
+
+  const labelMonth = (ym: string) => {
+    const [y, m] = ym.split('-');
+    return new Date(Number(y), Number(m) - 1).toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+  };
+
   return (
-    <div className="analytics-chart-placeholder" aria-hidden>
-      <svg viewBox="0 0 400 140" preserveAspectRatio="none">
+    <div className="analytics-chart-placeholder">
+      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
         <defs>
           <linearGradient id="fanGrowthGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgba(124, 58, 237, 0.35)" />
             <stop offset="100%" stopColor="rgba(124, 58, 237, 0)" />
           </linearGradient>
         </defs>
-        <path
-          d="M0,100 Q60,95 100,70 T200,50 T300,35 T400,25 L400,140 L0,140 Z"
-          fill="url(#fanGrowthGrad)"
-        />
-        <path
-          d="M0,100 Q60,95 100,70 T200,50 T300,35 T400,25"
-          fill="none"
-          stroke="rgba(167, 139, 250, 0.9)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
+        <path d={area} fill="url(#fanGrowthGrad)" />
+        <path d={line} fill="none" stroke="rgba(167, 139, 250, 0.9)" strokeWidth="2.5" strokeLinecap="round" />
+        {pts.map((p, i) => (
+          <circle key={i} cx={p[0]} cy={p[1]} r="3" fill="#1a1028" stroke="rgba(167, 139, 250, 0.9)" strokeWidth="2" />
+        ))}
+        {cumulative.map((c, i) => (
+          <text key={i} x={xs[i]} y={h - 4} textAnchor="middle" fill="rgba(255,255,255,0.35)" fontSize="9" fontWeight="600">
+            {labelMonth(c.month)}
+          </text>
+        ))}
       </svg>
     </div>
   );
 }
 
-function EngagementPlaceholder() {
+function EngagementChart({ engagement }: { engagement: number }) {
+  const w = 400;
+  const h = 140;
+  const rate = Math.min(engagement, 100);
+  const barW = (rate / 100) * (w - 16);
+
   return (
-    <div className="analytics-chart-placeholder" aria-hidden>
-      <svg viewBox="0 0 400 140" preserveAspectRatio="none">
-        <path
-          d="M0,90 L50,85 L100,95 L150,60 L200,70 L250,45 L300,55 L350,30 L400,40"
-          fill="none"
-          stroke="rgba(45, 212, 191, 0.85)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M0,110 L50,100 L100,105 L150,88 L200,92 L250,80 L300,85 L350,72 L400,78"
-          fill="none"
-          stroke="rgba(167, 139, 250, 0.5)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray="6 4"
-        />
+    <div className="analytics-chart-placeholder">
+      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="engGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(45, 212, 191, 0.6)" />
+            <stop offset="100%" stopColor="rgba(124, 58, 237, 0.8)" />
+          </linearGradient>
+        </defs>
+        <rect x="8" y="52" width={w - 16} height="18" rx="9" fill="rgba(255,255,255,0.06)" />
+        {barW > 0 && <rect x="8" y="52" width={barW} height="18" rx="9" fill="url(#engGrad)" />}
+        <text x={w / 2} y="44" textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="10" fontWeight="600" letterSpacing="0.1em">
+          ENGAGEMENT RATE
+        </text>
+        <text x={w / 2} y="96" textAnchor="middle" fill="#fff" fontSize="28" fontWeight="800">
+          {rate.toFixed(0)}%
+        </text>
+        <text x={w / 2} y="116" textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="9" fontWeight="600">
+          fans subscribed in last 30 days / total fans
+        </text>
       </svg>
     </div>
   );
 }
 
-/** Revenue vs price — peak near $5–6 */
-function RevenueBreakdownChart() {
+function RevenueBreakdownChart({ items, avgSubAmount }: { items: { price: number; revenue: number }[]; avgSubAmount: number }) {
   const padL = 44;
   const padB = 36;
   const w = 400;
@@ -158,122 +217,72 @@ function RevenueBreakdownChart() {
   const chartW = w - padL - 16;
   const chartH = h - padB - 24;
   const baseY = 24 + chartH;
-  const maxV = 7000;
+
+  if (items.length === 0) {
+    return <p className="analytics-empty">No revenue data yet.</p>;
+  }
+
+  const maxV = Math.max(...items.map((i) => i.revenue)) * 1.15 || 1;
   const toY = (v: number) => baseY - (v / maxV) * chartH;
-  const prices = [2, 3, 4, 5, 6, 7, 8];
-  const values = [1200, 1800, 2600, 6400, 5800, 3400, 1900];
-  const xs = prices.map((_, i) => padL + (i / (prices.length - 1)) * chartW);
-  const pts = values.map((v, i) => [xs[i], toY(v)] as const);
+  const xs = items.map((_, i) => padL + (i / Math.max(items.length - 1, 1)) * chartW);
+  const pts = items.map((item, i) => [xs[i], toY(item.revenue)] as const);
   const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]},${p[1]}`).join(' ');
-  const peakIdx = 3;
+
+  const ticks = [...new Set([0, Math.round(maxV / 2), Math.round(maxV)])];
+  const peakIdx = items.reduce((best, cur, i) => (cur.revenue > items[best].revenue ? i : best), 0);
   const [px, py] = pts[peakIdx];
 
   return (
     <div className="rev-chart-wrap" aria-hidden>
       <svg viewBox={`0 0 ${w} ${h}`} className="rev-chart-svg">
-        {[0, 3500, 7000].map((tick) => {
+        {ticks.map((tick) => {
           const y = toY(tick);
           return (
             <g key={tick}>
               <line x1={padL} y1={y} x2={w - 12} y2={y} stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
               <text x={8} y={y + 4} fill="rgba(255,255,255,0.35)" fontSize="10" fontWeight="600">
-                {tick === 7000 ? '7,000' : tick === 3500 ? '3,500' : '0'}
+                {tick >= 1000 ? `${(tick / 1000).toFixed(1)}k` : tick}
               </text>
             </g>
           );
         })}
         <path d={d} fill="none" stroke="rgba(192, 167, 255, 0.95)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        {prices.map((p, i) => (
-          <text key={p} x={xs[i]} y={h - 10} textAnchor="middle" fill="rgba(255,255,255,0.38)" fontSize="9" fontWeight="600">
-            ${p}.00
+        {items.map((item, i) => (
+          <text key={item.price} x={xs[i]} y={h - 10} textAnchor="middle" fill="rgba(255,255,255,0.38)" fontSize="9" fontWeight="600">
+            ${item.price.toFixed(2)}
           </text>
         ))}
-        <rect x={px - 72} y={py - 36} width="144" height="28" rx="6" fill="rgba(40, 32, 65, 0.95)" stroke="rgba(167, 139, 250, 0.35)" />
-        <text x={px} y={py - 16} textAnchor="middle" fill="#e9d5ff" fontSize="8" fontWeight="700" letterSpacing="0.06em">
-          AVERAGE FAN PRICE
-        </text>
-        <text x={px} y={py - 4} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800">
-          $5.67
-        </text>
+        {items.length > 1 && (
+          <>
+            <rect x={px - 72} y={py - 36} width="144" height="28" rx="6" fill="rgba(40, 32, 65, 0.95)" stroke="rgba(167, 139, 250, 0.35)" />
+            <text x={px} y={py - 16} textAnchor="middle" fill="#e9d5ff" fontSize="8" fontWeight="700" letterSpacing="0.06em">
+              AVERAGE FAN PRICE
+            </text>
+            <text x={px} y={py - 4} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800">
+              ${avgSubAmount.toFixed(2)}
+            </text>
+          </>
+        )}
       </svg>
     </div>
   );
 }
 
-function CumulativeRevenueChart() {
-  const w = 420;
-  const h = 220;
-  const padL = 44;
-  const padB = 36;
-  const chartW = w - padL - 16;
-  const chartH = h - padB - 24;
-  const baseY = 24 + chartH;
-  const maxV = 7000;
-  const toY = (v: number) => baseY - (v / maxV) * chartH;
-  const months = ['MAR 2026', 'APR 2026', 'MAY 2026', 'JUN 2026', 'JUL 2026'];
-  const values = [2100, 3400, 4100, 5200, 6742];
-  const xs = months.map((_, i) => padL + (i / (months.length - 1)) * chartW);
-  const pts = values.map((v, i) => [xs[i], toY(v)] as const);
-  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]},${p[1]}`).join(' ');
-  const last = pts[pts.length - 1];
-
-  return (
-    <div className="rev-chart-wrap" aria-hidden>
-      <svg viewBox={`0 0 ${w} ${h}`} className="rev-chart-svg">
-        {[0, 3500, 7000].map((tick) => {
-          const y = toY(tick);
-          return (
-            <g key={tick}>
-              <line x1={padL} y1={y} x2={w - 12} y2={y} stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
-              <text x={8} y={y + 4} fill="rgba(255,255,255,0.35)" fontSize="10" fontWeight="600">
-                {tick === 7000 ? '$7,000' : tick === 3500 ? '$3,500' : '$0'}
-              </text>
-            </g>
-          );
-        })}
-        <path d={d} fill="none" stroke="rgba(192, 167, 255, 0.95)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        {pts.map((p, i) => (
-          <circle key={i} cx={p[0]} cy={p[1]} r="4" fill="#1a1028" stroke="rgba(192, 167, 255, 0.95)" strokeWidth="2" />
-        ))}
-        {months.map((m, i) => (
-          <text key={m} x={xs[i]} y={h - 10} textAnchor="middle" fill="rgba(255,255,255,0.38)" fontSize="9" fontWeight="600">
-            {m}
-          </text>
-        ))}
-        <rect x={last[0] - 88} y={last[1] - 42} width="176" height="34" rx="6" fill="rgba(40, 32, 65, 0.95)" stroke="rgba(167, 139, 250, 0.35)" />
-        <text x={last[0]} y={last[1] - 24} textAnchor="middle" fill="#e9d5ff" fontSize="7" fontWeight="700" letterSpacing="0.06em">
-          TOTAL REVENUE ALL TIME
-        </text>
-        <text x={last[0]} y={last[1] - 10} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800">
-          $6,742
-        </text>
-      </svg>
-    </div>
-  );
-}
-
-function NewReturningChart() {
+function NewReturningChart({ newRevenue, returningRevenue }: { newRevenue: number; returningRevenue: number }) {
   const w = 360;
   const h = 200;
   const maxH = 120;
   const baseY = 160;
-  const newH = (4200 / 7000) * maxH;
-  const retH = (2800 / 7000) * maxH;
   const cx1 = 110;
   const cx2 = 250;
   const bw = 56;
+  const maxVal = Math.max(newRevenue, returningRevenue, 1);
+  const newH = (newRevenue / maxVal) * maxH;
+  const retH = (returningRevenue / maxVal) * maxH;
+  const ticks = [...new Set([0, Math.round(maxVal / 2), Math.round(maxVal)])];
 
   return (
     <div className="rev-chart-wrap rev-chart-wrap--bars" aria-hidden>
-      <div className="rev-bar-month">
-        <button type="button" className="rev-bar-month-nav" aria-label="Previous month">
-          ‹
-        </button>
-        <span>JUNE 2026</span>
-        <button type="button" className="rev-bar-month-nav" aria-label="Next month">
-          ›
-        </button>
-      </div>
       <svg viewBox={`0 0 ${w} ${h}`} className="rev-chart-svg">
         <defs>
           <linearGradient id="revBarGrad" x1="0" y1="0" x2="0" y2="1">
@@ -281,164 +290,190 @@ function NewReturningChart() {
             <stop offset="100%" stopColor="#6d28d9" />
           </linearGradient>
         </defs>
-        {[0, 3500, 7000].map((tick) => {
-          const y = baseY - (tick / 7000) * maxH;
+        {ticks.map((tick) => {
+          const y = baseY - (tick / maxVal) * maxH;
           return (
             <g key={tick}>
               <line x1={40} y1={y} x2={w - 20} y2={y} stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
               <text x={8} y={y + 4} fill="rgba(255,255,255,0.35)" fontSize="10" fontWeight="600">
-                {tick === 7000 ? '7,000' : tick === 3500 ? '3,500' : '0'}
+                {tick >= 1000 ? `$${(tick / 1000).toFixed(1)}k` : `$${tick}`}
               </text>
             </g>
           );
         })}
-        <rect x={cx1 - bw / 2} y={baseY - newH} width={bw} height={newH} rx="8" fill="url(#revBarGrad)" />
-        <rect x={cx2 - bw / 2} y={baseY - retH} width={bw} height={retH} rx="8" fill="url(#revBarGrad)" />
+        {newH > 0 && <rect x={cx1 - bw / 2} y={baseY - newH} width={bw} height={newH} rx="8" fill="url(#revBarGrad)" />}
+        {retH > 0 && <rect x={cx2 - bw / 2} y={baseY - retH} width={bw} height={retH} rx="8" fill="url(#revBarGrad)" />}
         <text x={cx1} y={baseY + 22} textAnchor="middle" fill="rgba(255,255,255,0.55)" fontSize="10" fontWeight="600">
-          New Subscribers
+          New Fans
         </text>
         <text x={cx2} y={baseY + 22} textAnchor="middle" fill="rgba(255,255,255,0.55)" fontSize="10" fontWeight="600">
-          Returning Subscribers
+          Returning Fans
         </text>
       </svg>
     </div>
   );
 }
 
-const RECENT_ROWS = [
-  { views: '22,743', comments: '3,400', fans: '56' },
-  { views: '22,743', comments: '3,400', fans: '56' },
-  { views: '22,743', comments: '3,400', fans: '56' },
-];
+interface PostRow {
+  id: string;
+  name: string;
+  file_type: string;
+  status: string;
+  review_status: string | null;
+  posted_date: string | null;
+  created_at: string;
+}
 
-const TOP_CITIES = [
-  { rank: 1, trend: 'up' as const, label: 'Lagos, Nigeria', flag: '🇳🇬', amount: '$4,323 / mo' },
-  { rank: 2, trend: 'up' as const, label: 'London, UK', flag: '🇬🇧', amount: '$3,891 / mo' },
-  { rank: 3, trend: 'down' as const, label: 'New York, USA', flag: '🇺🇸', amount: '$3,102 / mo' },
-  { rank: 4, trend: 'flat' as const, label: 'Toronto, Canada', flag: '🇨🇦', amount: '$2,640 / mo' },
-  { rank: 5, trend: 'up' as const, label: 'Berlin, Germany', flag: '🇩🇪', amount: '$2,198 / mo' },
-  { rank: 6, trend: 'down' as const, label: 'Paris, France', flag: '🇫🇷', amount: '$1,954 / mo' },
-  { rank: 7, trend: 'up' as const, label: 'Sydney, Australia', flag: '🇦🇺', amount: '$1,720 / mo' },
-];
+const COUNTRY_FLAG: Record<string, string> = {
+  usa: '🇺🇸', uk: '🇬🇧', nigeria: '🇳🇬', canada: '🇨🇦',
+  japan: '🇯🇵', germany: '🇩🇪', australia: '🇦🇺', france: '🇫🇷', brazil: '🇧🇷',
+};
+function countryFlag(country: string | null) {
+  return COUNTRY_FLAG[(country ?? '').toLowerCase()] ?? '';
+}
 
-const TOP_FANS = [
-  { rank: 1, name: 'dearshrimp', flag: '🇺🇸', amount: '$88.88 / mo' },
-  { rank: 2, name: 'waveform_k', flag: '🇬🇧', amount: '$72.40 / mo' },
-  { rank: 3, name: 'nolimitsaudio', flag: '🇳🇬', amount: '$64.00 / mo' },
-  { rank: 4, name: 'midnightvibes', flag: '🇨🇦', amount: '$59.20 / mo' },
-  { rank: 5, name: 'fanclub_jade', flag: '🇯🇵', amount: '$54.10 / mo' },
-  { rank: 6, name: 'supportlocal', flag: '🇺🇸', amount: '$48.00 / mo' },
-  { rank: 7, name: 'playlist_addict', flag: '🇧🇷', amount: '$42.50 / mo' },
-];
+function fmt(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return String(n);
+}
 
-function OverviewTab() {
+function statusLabel(post: PostRow) {
+  if (post.review_status === 'accepted') return { text: 'Live', cls: 'analytics-badge--live' };
+  if (post.review_status === 'pending') return { text: 'In Review', cls: 'analytics-badge--review' };
+  if (post.review_status === 'declined') return { text: 'Declined', cls: 'analytics-badge--declined' };
+  if (post.status === 'submitted') return { text: 'Submitted', cls: 'analytics-badge--review' };
+  return { text: 'Draft', cls: 'analytics-badge--draft' };
+}
+
+function OverviewTab({ insights, posts }: { insights: InsightsData | null; posts: PostRow[] }) {
+  const totalFans = insights ? fmt(insights.totalFans ?? 0) : '—';
+  const avgSub = insights ? `$${(insights.avgSubAmount ?? 0).toFixed(2)}` : '—';
+  const engagement = insights ? `${(insights.engagement ?? 0).toFixed(0)}%` : '—';
+  const totalViews = insights ? fmt(insights.totalViews ?? 0) : '—';
+  const fanDelta = insights ? `+${insights.newFansThisMonth} this month` : '';
+  const prevDelta = insights && insights.newFansPrevMonth > 0
+    ? `vs ${insights.newFansPrevMonth} last month`
+    : '';
+
   return (
     <>
       <div className="analytics-stats-row">
-        <StatCard label="Total Fans" value="12.4K" trend="+1.2k this month" tone="blue" icon={<IconUsers />} />
-        <StatCard label="Avg. Sub Amount" value="$8" trend="+$1 this month" tone="teal" icon={<IconDollar />} />
-        <StatCard label="Engagement Rate" value="72%" trend="-2% this month" tone="green" icon={<IconChart />} trendVariant="negative" />
-        <StatCard label="Total Views" value="42k" trend="+1.2k this month" tone="yellow" icon={<IconEye />} />
+        <StatCard label="Total Fans" value={totalFans} trend={fanDelta} tone="blue" icon={<IconUsers />} />
+        <StatCard label="Avg. Sub Amount" value={avgSub} trend={prevDelta} tone="teal" icon={<IconDollar />} />
+        <StatCard label="Engagement Rate" value={engagement} trend="" tone="green" icon={<IconChart />} />
+        <StatCard label="Total Views" value={totalViews} trend="" tone="yellow" icon={<IconEye />} />
       </div>
 
       <section className="analytics-panel">
         <h2 className="analytics-panel-title">Recent Content</h2>
-        {RECENT_ROWS.map((row, i) => (
-          <div key={i} className="analytics-content-row">
-            <span className="analytics-content-title">Day In My Life</span>
-            <div className="analytics-content-metrics">
-              <div className="analytics-metric">
-                Views
-                <strong>{row.views}</strong>
+        {posts.length === 0 ? (
+          <p className="analytics-empty">No content yet. Create a post to see it here.</p>
+        ) : (
+          posts.slice(0, 5).map((post) => {
+            const badge = statusLabel(post);
+            return (
+              <div key={post.id} className="analytics-content-row">
+                <div className="analytics-content-left">
+                  <span className="analytics-content-title">{post.name}</span>
+                  <span className="analytics-content-type">{post.file_type}</span>
+                </div>
+                <div className="analytics-content-metrics">
+                  <span className={`analytics-badge ${badge.cls}`}>{badge.text}</span>
+                  {post.posted_date && (
+                    <div className="analytics-metric">
+                      Date
+                      <strong>{post.posted_date}</strong>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="analytics-metric">
-                Comments
-                <strong>{row.comments}</strong>
-              </div>
-              <div className="analytics-metric">
-                New Fans
-                <strong>{row.fans}</strong>
-              </div>
-            </div>
-          </div>
-        ))}
-        <div className="analytics-see-more-wrap">
-          <button type="button" className="analytics-see-more">
-            See More
-          </button>
-        </div>
+            );
+          })
+        )}
       </section>
 
       <div className="analytics-bottom-grid">
         <div className="analytics-chart-card">
           <h3>Fan Growth</h3>
-          <FanGrowthPlaceholder />
+          <FanGrowthChart months={insights?.fanGrowthByMonth ?? []} />
         </div>
         <div className="analytics-chart-card">
-          <h3>Engagement Overview</h3>
-          <EngagementPlaceholder />
+          <h3>Engagement Rate</h3>
+          <EngagementChart engagement={insights?.engagement ?? 0} />
         </div>
       </div>
     </>
   );
 }
 
-function RevenueTab() {
+function RevenueTab({ revenue }: { revenue: RevenueData | null }) {
+  const total = revenue ? `$${revenue.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+  const avg = revenue ? `$${revenue.avgSubAmount.toFixed(2)}` : '—';
+  const newRev = revenue ? `$${revenue.newRevenue.toFixed(2)}` : '—';
+  const retRev = revenue ? `$${revenue.returningRevenue.toFixed(2)}` : '—';
+
   return (
     <>
       <div className="analytics-stats-row">
-        <StatCard label="Revenue" value="$12,000" trend="+1.2k this month" tone="purple" icon={<IconWallet />} />
-        <StatCard label="Average Seat Price" value="$5.67" trend="+$0.20 this month" tone="blue" icon={<IconUsers />} />
-        <StatCard label="Subscription Revenue" value="$8,000" trend="+1.2k this month" tone="red" icon={<IconVideoCamera />} />
-        <StatCard label="Merch Sales" value="$4,000" trend="+1.2k this month" tone="green" icon={<IconVinyl />} />
+        <StatCard label="Total Revenue" value={total} trend="" tone="purple" icon={<IconWallet />} />
+        <StatCard label="Avg. Sub Price" value={avg} trend="" tone="blue" icon={<IconUsers />} />
+        <StatCard label="New Fan Revenue" value={newRev} trend="last 30 days" tone="red" icon={<IconVideoCamera />} />
+        <StatCard label="Returning Revenue" value={retRev} trend="older fans" tone="green" icon={<IconVinyl />} />
       </div>
 
       <div className="rev-mid-grid">
         <div className="analytics-chart-card rev-card-tall">
-          <h3>Revenue Breakdown</h3>
-          <RevenueBreakdownChart />
+          <h3>Revenue by Price Point</h3>
+          <RevenueBreakdownChart
+            items={revenue?.revenueByPrice ?? []}
+            avgSubAmount={revenue?.avgSubAmount ?? 0}
+          />
         </div>
         <div className="analytics-chart-card rev-card-list">
           <h3>Top Cities</h3>
-          <ul className="rev-rank-list">
-            {TOP_CITIES.map((row) => (
-              <li key={row.rank} className="rev-rank-row">
-                <span className="rev-rank-trend">
-                  <TrendIcon dir={row.trend} />
-                </span>
-                <span className="rev-rank-num">{row.rank}.</span>
-                <span className="rev-rank-label">
-                  {row.label} {row.flag}
-                </span>
-                <span className="rev-rank-amount">{row.amount}</span>
-              </li>
-            ))}
-          </ul>
+          {!revenue || revenue.topCities.length === 0 ? (
+            <p className="analytics-empty">No fan location data yet.</p>
+          ) : (
+            <ul className="rev-rank-list">
+              {revenue.topCities.map((row, i) => (
+                <li key={i} className="rev-rank-row">
+                  <span className="rev-rank-num">{i + 1}.</span>
+                  <span className="rev-rank-label">
+                    {row.label} {countryFlag(row.country)}
+                  </span>
+                  <span className="rev-rank-amount">${row.revenue.toFixed(2)} / mo</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="analytics-chart-card rev-card-list">
           <h3>Top Fans</h3>
-          <ul className="rev-rank-list">
-            {TOP_FANS.map((row) => (
-              <li key={row.rank} className="rev-rank-row rev-rank-row--fan">
-                <span className="rev-rank-num">{row.rank}.</span>
-                <span className="rev-rank-label">
-                  {row.name} {row.flag}
-                </span>
-                <span className="rev-rank-amount">{row.amount}</span>
-              </li>
-            ))}
-          </ul>
+          {!revenue || revenue.topFans.length === 0 ? (
+            <p className="analytics-empty">No fans yet.</p>
+          ) : (
+            <ul className="rev-rank-list">
+              {revenue.topFans.map((fan, i) => (
+                <li key={i} className="rev-rank-row rev-rank-row--fan">
+                  <span className="rev-rank-num">{i + 1}.</span>
+                  <span className="rev-rank-label">
+                    {fan.display_name ?? 'Anonymous'} {countryFlag(fan.country)}
+                  </span>
+                  <span className="rev-rank-amount">${fan.monthly_amount.toFixed(2)} / mo</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
       <div className="analytics-bottom-grid rev-bottom-pair">
         <div className="analytics-chart-card rev-card-tall">
-          <h3>Cumulative Revenue</h3>
-          <CumulativeRevenueChart />
-        </div>
-        <div className="analytics-chart-card rev-card-tall">
           <h3>New v. Returning Revenue</h3>
-          <NewReturningChart />
+          <NewReturningChart
+            newRevenue={revenue?.newRevenue ?? 0}
+            returningRevenue={revenue?.returningRevenue ?? 0}
+          />
         </div>
       </div>
     </>
@@ -447,6 +482,70 @@ function RevenueTab() {
 
 export default function Analytics() {
   const [tab, setTab] = useState<AnalyticsTab>('overview');
+  const [insights, setInsights] = useState<InsightsData | null>(null);
+  const [revenue, setRevenue] = useState<RevenueData | null>(null);
+  const [posts, setPosts] = useState<PostRow[]>([]);
+  const [seeding, setSeeding] = useState(false);
+  const [seedMsg, setSeedMsg] = useState('');
+
+  const loadInsights = () => {
+    const token = getToken();
+    if (!token) return;
+    fetch('/api/artist/insights', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setInsights(data); })
+      .catch(() => {});
+    fetch('/api/artist/revenue', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setRevenue(data); })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadInsights();
+    const token = getToken();
+    if (!token) return;
+    fetch('/api/posts', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: PostRow[]) => setPosts(data.sort((a, b) => b.created_at.localeCompare(a.created_at))))
+      .catch(() => {});
+  }, []);
+
+  const handleSeed = async () => {
+    setSeeding(true);
+    setSeedMsg('');
+    try {
+      const r = await fetch('/api/dev/seed-fans', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const d = await r.json();
+      setSeedMsg(d.message ?? (r.ok ? 'Seeded!' : 'Failed'));
+      if (r.ok) loadInsights();
+    } catch {
+      setSeedMsg('Error seeding data');
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  const handleClearSeed = async () => {
+    setSeeding(true);
+    setSeedMsg('');
+    try {
+      const r = await fetch('/api/dev/seed-fans', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const d = await r.json();
+      setSeedMsg(d.message ?? (r.ok ? 'Cleared!' : 'Failed'));
+      if (r.ok) loadInsights();
+    } catch {
+      setSeedMsg('Error clearing data');
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   return (
     <div className="analytics-page">
@@ -474,6 +573,13 @@ export default function Analytics() {
             </button>
           </div>
           <div className="analytics-toolbar">
+            <button type="button" className="analytics-toolbar-btn analytics-seed-btn" onClick={handleSeed} disabled={seeding}>
+              {seeding ? 'Working…' : 'Seed Test Data'}
+            </button>
+            <button type="button" className="analytics-toolbar-btn analytics-clear-btn" onClick={handleClearSeed} disabled={seeding}>
+              Clear Seed Data
+            </button>
+            {seedMsg && <span className="analytics-seed-msg">{seedMsg}</span>}
             <button type="button" className="analytics-toolbar-btn">
               <IconDownload />
               Export
@@ -487,8 +593,8 @@ export default function Analytics() {
         </div>
       </header>
 
-      {tab === 'overview' && <OverviewTab />}
-      {tab === 'revenue' && <RevenueTab />}
+      {tab === 'overview' && <OverviewTab insights={insights} posts={posts} />}
+      {tab === 'revenue' && <RevenueTab revenue={revenue} />}
     </div>
   );
 }

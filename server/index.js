@@ -150,14 +150,16 @@ function syncArtistFanStats(artistId) {
   const engagement = fanCount > 0
     ? Math.min(100, Math.round((active30 / fanCount) * 100))
     : 0;
+  const avgSubAmount = fanCount > 0 ? stats.revenue / fanCount : 0;
 
   db.prepare(`
     UPDATE Artist SET
       monthly_revenue = ?,
       engagement = ?,
+      avg_sub_amount = ?,
       updated_at = datetime('now')
     WHERE id = ?
-  `).run(stats.revenue, engagement, artistId);
+  `).run(stats.revenue, engagement, avgSubAmount, artistId);
 }
 
 // Backfill slug from username for existing artists
@@ -504,6 +506,47 @@ app.post('/api/fans/subscribe', (req, res) => {
   res.status(201).json({ success: true, fanId: fan.id });
 });
 
+// POST /api/dev/seed-fans — insert realistic test fan data for the logged-in artist (dev/demo only)
+app.post('/api/dev/seed-fans', requireAuth, (req, res) => {
+  const artistId = req.user.id;
+  const daysAgo = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0, 19).replace('T', ' ');
+  };
+  const TEST_FANS = [
+    { display_name: 'dearshrimp',     email: 'fan1@test.com', city: 'New York', region: 'NY',          country: 'USA',       monthly_amount: 8.99,  subscribed_at: daysAgo(155) },
+    { display_name: 'waveform_k',     email: 'fan2@test.com', city: 'London',   region: 'England',      country: 'UK',        monthly_amount: 12.50, subscribed_at: daysAgo(120) },
+    { display_name: 'nolimitsaudio',  email: 'fan3@test.com', city: 'Lagos',    region: 'Lagos State',  country: 'Nigeria',   monthly_amount: 5.00,  subscribed_at: daysAgo(90) },
+    { display_name: 'midnightvibes',  email: 'fan4@test.com', city: 'Toronto',  region: 'ON',           country: 'Canada',    monthly_amount: 9.99,  subscribed_at: daysAgo(60) },
+    { display_name: 'fanclub_jade',   email: 'fan5@test.com', city: 'Tokyo',    region: 'Kanto',        country: 'Japan',     monthly_amount: 15.00, subscribed_at: daysAgo(35) },
+    { display_name: 'supportlocal',   email: 'fan6@test.com', city: 'Berlin',   region: 'Berlin',       country: 'Germany',   monthly_amount: 6.00,  subscribed_at: daysAgo(12) },
+    { display_name: 'playlist_addict',email: 'fan7@test.com', city: 'Sydney',   region: 'NSW',          country: 'Australia', monthly_amount: 10.00, subscribed_at: daysAgo(2)  },
+  ];
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO Fan (artist_id, external_user_id, display_name, email, city, region, country, monthly_amount, subscribed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertMany = db.transaction((fans) => {
+    for (const f of fans) {
+      insert.run(artistId, `seed-${f.email}`, f.display_name, f.email, f.city, f.region, f.country, f.monthly_amount, f.subscribed_at);
+    }
+  });
+  insertMany(TEST_FANS);
+  syncArtistFanStats(artistId);
+  res.json({ success: true, message: `Seeded ${TEST_FANS.length} test fans.` });
+});
+
+// DELETE /api/dev/seed-fans — remove all seeded test fans for the logged-in artist
+app.delete('/api/dev/seed-fans', requireAuth, (req, res) => {
+  const artistId = req.user.id;
+  const result = db.prepare(
+    "DELETE FROM Fan WHERE artist_id = ? AND external_user_id LIKE 'seed-%'"
+  ).run(artistId);
+  syncArtistFanStats(artistId);
+  res.json({ success: true, message: `Removed ${result.changes} test fans.` });
+});
+
 // GET /api/artist/insights — fan analytics for logged-in artist
 app.get('/api/artist/insights', requireAuth, (req, res) => {
   const artistId = req.user.id;
@@ -545,7 +588,13 @@ app.get('/api/artist/insights', requireAuth, (req, res) => {
     SELECT COALESCE(SUM(monthly_amount), 0) AS total FROM Fan WHERE artist_id = ?
   `).get(artistId);
 
-  const artist = db.prepare('SELECT engagement FROM Artist WHERE id = ?').get(artistId);
+  const artistFull = db.prepare('SELECT engagement, total_views, avg_sub_amount FROM Artist WHERE id = ?').get(artistId);
+
+  const fanGrowthByMonth = db.prepare(`
+    SELECT strftime('%Y-%m', subscribed_at) AS month, COUNT(*) AS count
+    FROM Fan WHERE artist_id = ?
+    GROUP BY month ORDER BY month ASC LIMIT 6
+  `).all(artistId);
 
   res.json({
     totalFans,
@@ -555,8 +604,60 @@ app.get('/api/artist/insights', requireAuth, (req, res) => {
     topRegion: topRegion?.label ?? null,
     topCity: topCity?.label ?? null,
     monthlyRevenue: revenueRow.total,
-    engagement: artist?.engagement ?? 0,
+    engagement: artistFull?.engagement ?? 0,
+    totalViews: artistFull?.total_views ?? 0,
+    avgSubAmount: artistFull?.avg_sub_amount ?? 0,
+    fanGrowthByMonth,
   });
+});
+
+// GET /api/artist/revenue — detailed revenue analytics for logged-in artist
+app.get('/api/artist/revenue', requireAuth, (req, res) => {
+  const artistId = req.user.id;
+
+  const totalRevenue = db.prepare(
+    'SELECT COALESCE(SUM(monthly_amount), 0) AS total FROM Fan WHERE artist_id = ?'
+  ).get(artistId).total;
+
+  const avgSubAmount = db.prepare(
+    'SELECT COALESCE(AVG(monthly_amount), 0) AS avg FROM Fan WHERE artist_id = ?'
+  ).get(artistId).avg;
+
+  const newRevenue = db.prepare(`
+    SELECT COALESCE(SUM(monthly_amount), 0) AS total FROM Fan
+    WHERE artist_id = ? AND subscribed_at >= datetime('now', '-30 days')
+  `).get(artistId).total;
+
+  const returningRevenue = db.prepare(`
+    SELECT COALESCE(SUM(monthly_amount), 0) AS total FROM Fan
+    WHERE artist_id = ? AND subscribed_at < datetime('now', '-30 days')
+  `).get(artistId).total;
+
+  const topCities = db.prepare(`
+    SELECT
+      COALESCE(city, country, 'Unknown') AS label,
+      country,
+      COUNT(*) AS fan_count,
+      SUM(monthly_amount) AS revenue
+    FROM Fan WHERE artist_id = ?
+    GROUP BY COALESCE(city, country, 'Unknown'), country
+    ORDER BY revenue DESC LIMIT 7
+  `).all(artistId);
+
+  const topFans = db.prepare(`
+    SELECT display_name, country, monthly_amount
+    FROM Fan WHERE artist_id = ?
+    ORDER BY monthly_amount DESC LIMIT 7
+  `).all(artistId);
+
+  const revenueByPrice = db.prepare(`
+    SELECT ROUND(monthly_amount, 2) AS price, SUM(monthly_amount) AS revenue
+    FROM Fan WHERE artist_id = ?
+    GROUP BY ROUND(monthly_amount, 2)
+    ORDER BY price ASC
+  `).all(artistId);
+
+  res.json({ totalRevenue, avgSubAmount, newRevenue, returningRevenue, topCities, topFans, revenueByPrice });
 });
 
 // GET /api/wallet — return artist wallet info + proxied Circle balance

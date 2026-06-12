@@ -96,7 +96,7 @@ interface WalletInfo {
   walletAddress: string | null;
   circleWalletId: string | null;
   walletChain: string | null;
-  balance: unknown;
+  balance: { amount?: string; currency?: string } | null;
 }
 
 type ModalStatus = { type: 'success' | 'error'; message: string } | null;
@@ -181,7 +181,16 @@ export default function Monetization() {
 
       <section className="monet-balance-block">
         <p className="monet-balance-label">Your Balance</p>
-        <p className="monet-balance-value">$12,000</p>
+        <p className="monet-balance-value">
+          {walletInfo?.balance?.amount != null
+            ? `$${Number(walletInfo.balance.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${walletInfo.balance.currency ?? 'USDC'}`
+            : walletInfo?.circleWalletId
+              ? 'Loading…'
+              : '—'}
+        </p>
+        {walletInfo?.circleWalletId && (
+          <p className="monet-wallet-id">Circle Wallet: {walletInfo.circleWalletId}</p>
+        )}
         <BalanceChart />
       </section>
 
