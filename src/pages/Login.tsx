@@ -127,7 +127,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
         ) : (
           <form className="login-form" onSubmit={handleForgotPassword}>
             <p className="login-hint">
-              Enter the email on your verified artist account. We&apos;ll send you a reset link.
+              Enter the email on your artist account. We&apos;ll send you a reset link.
             </p>
 
             <div className="login-field">

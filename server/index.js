@@ -10,6 +10,11 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { generateVerificationToken, sendVerificationEmail, sendPasswordResetEmail } from './email.js';
 import { provisionArtistWallet, saveArtistWallet } from './wallet.js';
+import {
+  parseCircleUsdcBalance,
+  normalizeCircleTransaction,
+  buildBalanceChart,
+} from './circleWallet.js';
 
 // Use an env var in production: JWT_SECRET=<random-secret> node server/index.js
 const JWT_SECRET = process.env.JWT_SECRET ?? 'joko-dev-secret-change-in-production';
@@ -248,12 +253,6 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     return res.json({ success: true, message: 'If an account exists for that email, a reset link has been sent.' });
   }
 
-  if (artist.email_verified !== '1') {
-    return res.status(400).json({
-      error: 'Please verify your email before resetting your password.',
-    });
-  }
-
   const token = generateVerificationToken();
   const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   db.prepare(`
@@ -387,16 +386,12 @@ app.post('/api/auth/onboard', onboardUpload, async (req, res) => {
   );
 
   const artist = db.prepare('SELECT * FROM Artist WHERE rowid = ?').get(result.lastInsertRowid);
-  const walletResult = await ensureArtistWallet(artist);
   const emailResult = await sendArtistVerificationEmail(artist);
 
   res.status(201).json({
     success: true,
     artistId: artist.id,
     emailSent: emailResult.sent,
-    walletCreated: walletResult.created,
-    ...(walletResult.circleWalletId && { circleWalletId: walletResult.circleWalletId }),
-    ...(walletResult.reason && !walletResult.created && { walletError: walletResult.reason }),
     ...(emailResult.verifyUrl && { verifyUrl: emailResult.verifyUrl }),
   });
 });
@@ -471,9 +466,6 @@ app.get('/api/auth/verify-email', async (req, res) => {
     UPDATE Artist SET email_verified = '1', verification_token = NULL, updated_at = datetime('now')
     WHERE id = ?
   `).run(artist.id);
-
-  // Retry wallet creation if signup provisioning failed
-  await ensureArtistWallet(artist);
 
   res.redirect('/onboarding?verified=1');
 });
@@ -821,11 +813,32 @@ app.get('/api/wallet', requireAuth, async (req, res) => {
   const artist = db.prepare('SELECT wallet_address, circle_wallet_id, wallet_chain FROM Artist WHERE id = ?').get(req.user.id);
   if (!artist) return res.status(404).json({ error: 'Artist not found' });
 
+  const usdcTokenId = process.env.USDC_TOKEN_ID ?? '';
   let balance = null;
+  let balanceChart = null;
+  let balanceError = null;
+
   if (artist.circle_wallet_id) {
     try {
       const r = await fetch(`${PAYMENTS_URL}/joko/wallet/balance/${artist.circle_wallet_id}`);
-      if (r.ok) balance = await r.json();
+      if (r.ok) {
+        const raw = await r.json();
+        balance = parseCircleUsdcBalance(raw, usdcTokenId);
+        if (!balance) balanceError = 'Could not read USDC balance from Circle response.';
+      } else {
+        balanceError = 'Payments service returned an error loading balance.';
+      }
+    } catch {
+      balanceError = 'Could not reach payments service. Is it running on port 5001?';
+    }
+
+    try {
+      const txRes = await fetch(`${PAYMENTS_URL}/joko/wallet/transactions/${artist.circle_wallet_id}`);
+      if (txRes.ok) {
+        const { transactions: rawTxs = [] } = await txRes.json();
+        const currentUsdc = balance?.amount != null ? Number(balance.amount) : 0;
+        balanceChart = buildBalanceChart(rawTxs, currentUsdc, usdcTokenId);
+      }
     } catch {}
   }
 
@@ -834,7 +847,35 @@ app.get('/api/wallet', requireAuth, async (req, res) => {
     circleWalletId: artist.circle_wallet_id ?? null,
     walletChain: artist.wallet_chain ?? null,
     balance,
+    balanceChart,
+    balanceError,
   });
+});
+
+// GET /api/wallet/transactions — Circle transaction history for the artist wallet
+app.get('/api/wallet/transactions', requireAuth, async (req, res) => {
+  const artist = db.prepare('SELECT circle_wallet_id FROM Artist WHERE id = ?').get(req.user.id);
+  if (!artist) return res.status(404).json({ error: 'Artist not found' });
+  if (!artist.circle_wallet_id) {
+    return res.json({ transactions: [] });
+  }
+
+  const usdcTokenId = process.env.USDC_TOKEN_ID ?? '';
+
+  try {
+    const r = await fetch(`${PAYMENTS_URL}/joko/wallet/transactions/${artist.circle_wallet_id}`);
+    if (!r.ok) return res.status(r.status).json({ error: 'Failed to load transactions' });
+
+    const { transactions: rawTxs = [] } = await r.json();
+    const transactions = rawTxs
+      .map((tx) => normalizeCircleTransaction(tx, usdcTokenId))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.json({ transactions });
+  } catch (err) {
+    console.error('Wallet transactions error:', err);
+    res.status(500).json({ error: 'Failed to load transactions' });
+  }
 });
 
 // POST /api/wallet/connect — save artist's external wallet address and/or Circle wallet ID

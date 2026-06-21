@@ -36,20 +36,25 @@ export async function sendVerificationEmail({ to, name, token }) {
     return { sent: false, verifyUrl };
   }
 
-  await transporter.sendMail({
-    from: SMTP_FROM,
-    to,
-    subject: 'Verify your Joko artist account',
-    html: `
+  try {
+    await transporter.sendMail({
+      from: SMTP_FROM,
+      to,
+      subject: 'Verify your Joko artist account',
+      html: `
       <p>Hi ${name},</p>
       <p>Thanks for signing up for Joko. Click the link below to verify your email and activate your account:</p>
       <p><a href="${verifyUrl}">${verifyUrl}</a></p>
       <p>This link expires in 24 hours.</p>
       <p>— The Joko Team</p>
     `,
-  });
-
-  return { sent: true };
+    });
+    return { sent: true };
+  } catch (err) {
+    console.error('[email] Verification send failed for', to, '—', err.message);
+    console.log('[email] Verification link:', verifyUrl, '\n');
+    return { sent: false, verifyUrl, error: err.message };
+  }
 }
 
 export function buildPasswordResetUrl(token) {
@@ -66,18 +71,23 @@ export async function sendPasswordResetEmail({ to, name, token }) {
     return { sent: false, resetUrl };
   }
 
-  await transporter.sendMail({
-    from: SMTP_FROM,
-    to,
-    subject: 'Reset your Joko artist password',
-    html: `
+  try {
+    await transporter.sendMail({
+      from: SMTP_FROM,
+      to,
+      subject: 'Reset your Joko artist password',
+      html: `
       <p>Hi ${name},</p>
       <p>We received a request to reset your password. Click the link below to choose a new one:</p>
       <p><a href="${resetUrl}">${resetUrl}</a></p>
       <p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
       <p>— The Joko Team</p>
     `,
-  });
-
-  return { sent: true };
+    });
+    return { sent: true };
+  } catch (err) {
+    console.error('[email] Password reset send failed for', to, '—', err.message);
+    console.log('[email] Reset link:', resetUrl, '\n');
+    return { sent: false, resetUrl, error: err.message };
+  }
 }

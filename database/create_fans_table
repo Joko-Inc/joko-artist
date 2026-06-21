@@ -1,0 +1,19 @@
+-- SQLite — Fan table
+-- Full schema + ER diagram: see SCHEMA.md in this folder
+CREATE TABLE IF NOT EXISTS Fan (
+    id               TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    artist_id        TEXT NOT NULL,
+    external_user_id TEXT,
+    display_name     TEXT,
+    email            TEXT,
+    city             TEXT,
+    region           TEXT,
+    country          TEXT,
+    monthly_amount   REAL NOT NULL DEFAULT 0.0,
+    subscribed_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (artist_id) REFERENCES Artist(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fan_artist_external
+    ON Fan(artist_id, external_user_id)
+    WHERE external_user_id IS NOT NULL;

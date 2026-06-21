@@ -1,0 +1,4 @@
+-- Circle platform wallet + external withdrawal address (Monetization)
+ALTER TABLE Artist ADD COLUMN wallet_address TEXT;
+ALTER TABLE Artist ADD COLUMN circle_wallet_id TEXT;
+ALTER TABLE Artist ADD COLUMN wallet_chain TEXT;
