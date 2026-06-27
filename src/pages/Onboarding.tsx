@@ -86,11 +86,37 @@ export default function Onboarding() {
 
   const aestheticInputRef = useRef<HTMLInputElement>(null);
 
+  const ONBOARD_ARTIST_KEY = 'joko_onboard_artistId';
+  const ONBOARD_EMAIL_KEY = 'joko_onboard_email';
+
+  const persistOnboardingContext = (id: string, email: string) => {
+    sessionStorage.setItem(ONBOARD_ARTIST_KEY, id);
+    sessionStorage.setItem(ONBOARD_EMAIL_KEY, email);
+  };
+
+  const restoreOnboardingContext = () => {
+    const id = sessionStorage.getItem(ONBOARD_ARTIST_KEY);
+    const email = sessionStorage.getItem(ONBOARD_EMAIL_KEY);
+    if (id) setArtistId(id);
+    if (email) setProfile((prev) => ({ ...prev, email }));
+    return { id, email };
+  };
+
+  const clearOnboardingContext = () => {
+    sessionStorage.removeItem(ONBOARD_ARTIST_KEY);
+    sessionStorage.removeItem(ONBOARD_EMAIL_KEY);
+  };
+
   useEffect(() => {
     if (searchParams.get('verified') === '1') {
+      restoreOnboardingContext();
       setStep('verify-success');
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    restoreOnboardingContext();
+  }, []);
 
   useEffect(() => {
     if (step !== 'welcome') return;
@@ -161,7 +187,10 @@ export default function Onboarding() {
       if (data.verifyUrl) setDevVerifyUrl(data.verifyUrl);
       setArtistId(data.artistId ?? null);
       if (data.circleWalletId) setCircleWalletId(data.circleWalletId);
-      setStep('wallet-connect');
+      if (data.artistId && profile.email) {
+        persistOnboardingContext(data.artistId, profile.email);
+      }
+      setStep('verify-pending');
     } catch {
       setError('Could not reach the server.');
     } finally {
@@ -191,7 +220,12 @@ export default function Onboarding() {
     }
   };
 
-  const handleWalletSkip = () => setStep('verify-pending');
+  const handleVerifySkip = () => setStep('wallet-connect');
+
+  const handleWalletSkip = () => {
+    clearOnboardingContext();
+    navigate('/login');
+  };
 
   const advanceWalletSuccessFlow = () => {
     setStep('wallet-verifying');
@@ -206,16 +240,25 @@ export default function Onboarding() {
     }
 
     if (!artistId || !profile.email) {
-      setWalletError('Account info missing. Please go back and complete signup.');
-      return;
+      const storedId = sessionStorage.getItem(ONBOARD_ARTIST_KEY);
+      const storedEmail = sessionStorage.getItem(ONBOARD_EMAIL_KEY);
+      if (storedId) setArtistId(storedId);
+      if (storedEmail) setProfile((prev) => ({ ...prev, email: storedEmail }));
+      if (!storedId || !storedEmail) {
+        setWalletError('Account info missing. Please go back and complete signup.');
+        return;
+      }
     }
+
+    const provisionArtistId = artistId ?? sessionStorage.getItem(ONBOARD_ARTIST_KEY);
+    const provisionEmail = profile.email || sessionStorage.getItem(ONBOARD_EMAIL_KEY);
 
     setBusy(true);
     try {
       const res = await fetch('/api/auth/provision-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artistId, email: profile.email }),
+        body: JSON.stringify({ artistId: provisionArtistId, email: provisionEmail }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -231,11 +274,12 @@ export default function Onboarding() {
     }
   };
 
-  const handleWalletWelcomeContinue = () => setStep('verify-pending');
-
-  const handleFinish = () => {
+  const handleWalletWelcomeContinue = () => {
+    clearOnboardingContext();
     navigate('/login');
   };
+
+  const handleVerifySuccessContinue = () => setStep('wallet-connect');
 
   const loginLink = (
     <p className="onboarding-footer">
@@ -466,6 +510,64 @@ export default function Onboarding() {
         </div>
       )}
 
+      {step === 'verify-pending' && (
+        <div className="onboarding-inner">
+          <JokoLogo className="onboarding-logo" />
+          <div className="onboarding-verify">
+            <h1 className="onboarding-heading">Verify your email</h1>
+            <p className="onboarding-verify-text">
+              We&apos;ve sent a link to{' '}
+              <span className="onboarding-verify-email">{profile.email}</span>.
+              Please check your inbox and verify before creating your wallet.
+            </p>
+            {devVerifyUrl && (
+              <p className="onboarding-dev-link">
+                Dev mode: <a href={devVerifyUrl}>click here to verify</a> (SMTP not configured)
+              </p>
+            )}
+            <div className="onboarding-verify-actions">
+              <button
+                type="button"
+                className="onboarding-btn onboarding-btn--secondary"
+                onClick={handleResend}
+              >
+                Resend email
+              </button>
+              {resendMsg && <p className="onboarding-resend-msg">{resendMsg}</p>}
+              {error && <p className="onboarding-error">{error}</p>}
+            </div>
+          </div>
+          <div className="onboarding-verify-skip-wrap">
+            <button type="button" className="wallet-skip-btn wallet-skip-btn--bottom" onClick={handleVerifySkip}>
+              Skip
+            </button>
+            <p className="onboarding-verify-skip-note">
+              Note: Make this required before creating wallet. Leaving this option here for future development.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {step === 'verify-success' && (
+        <div className="onboarding-inner">
+          <JokoLogo className="onboarding-logo" />
+          <div className="onboarding-verify">
+            <h1 className="onboarding-heading">Email verified</h1>
+            <p className="onboarding-verify-text">Your email has been verified!</p>
+            <p className="onboarding-verify-text">
+              Next, create your wallet to receive earnings on Joko.
+            </p>
+            <button
+              type="button"
+              className="onboarding-btn onboarding-btn--fixed"
+              onClick={handleVerifySuccessContinue}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
       {step === 'wallet-connect' && (
         <div className="onboarding-inner">
           <JokoLogo className="onboarding-logo" />
@@ -493,7 +595,7 @@ export default function Onboarding() {
             {walletError && <p className="onboarding-error wallet-connect-error">{walletError}</p>}
           </div>
           <button type="button" className="wallet-skip-btn wallet-skip-btn--bottom" onClick={handleWalletSkip}>
-            Skip for now
+            Skip wallet setup
           </button>
         </div>
       )}
@@ -532,59 +634,6 @@ export default function Onboarding() {
               onClick={handleWalletWelcomeContinue}
             >
               Continue
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 'verify-pending' && (
-        <div className="onboarding-inner">
-          <JokoLogo className="onboarding-logo" />
-          <div className="onboarding-verify">
-            <h1 className="onboarding-heading">Verify your email</h1>
-            <p className="onboarding-verify-text">
-              The link we&apos;ve sent to{' '}
-              <span className="onboarding-verify-email">{profile.email}</span>{' '}
-              will expire soon. Please check your inbox and follow the instructions.
-            </p>
-            {devVerifyUrl && (
-              <p className="onboarding-dev-link">
-                Dev mode: <a href={devVerifyUrl}>click here to verify</a> (SMTP not configured)
-              </p>
-            )}
-            <div className="onboarding-verify-actions">
-              <button
-                type="button"
-                className="onboarding-btn"
-                onClick={() => navigate('/login')}
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                className="onboarding-btn onboarding-btn--secondary"
-                onClick={handleResend}
-              >
-                Resend email
-              </button>
-              {resendMsg && <p className="onboarding-resend-msg">{resendMsg}</p>}
-              {error && <p className="onboarding-error">{error}</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {step === 'verify-success' && (
-        <div className="onboarding-inner">
-          <JokoLogo className="onboarding-logo" />
-          <div className="onboarding-verify">
-            <h1 className="onboarding-heading">Verify your email</h1>
-            <p className="onboarding-verify-text">Your email has been verified!</p>
-            <p className="onboarding-verify-text">
-              You can now sign in with your username and password.
-            </p>
-            <button type="button" className="onboarding-btn onboarding-btn--fixed" onClick={handleFinish}>
-              Sign in
             </button>
           </div>
         </div>
